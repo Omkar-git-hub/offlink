@@ -6,15 +6,13 @@ class IdentityInitializationService {
   IdentityInitializationService({
     NodeIdGenerator? nodeIdGenerator,
     IdentityKeyService? keyService,
-  })  : _nodeIdGenerator = nodeIdGenerator ?? NodeIdGenerator(),
-        _keyService = keyService ?? IdentityKeyService();
+  }) : _nodeIdGenerator = nodeIdGenerator ?? NodeIdGenerator(),
+       _keyService = keyService ?? IdentityKeyService();
 
   final NodeIdGenerator _nodeIdGenerator;
   final IdentityKeyService _keyService;
 
-  Future<OfflinkIdentity> createIdentity({
-    required String username,
-  }) async {
+  Future<OfflinkIdentity> createIdentity({required String username}) async {
     final normalizedUsername = username.trim();
 
     if (normalizedUsername.isEmpty) {
@@ -24,13 +22,9 @@ class IdentityInitializationService {
     final nodeId = _nodeIdGenerator.generate();
     final keyPair = await _keyService.generateKeyPair();
 
-    final publicKeyBytes = await _keyService.exportPublicKey(
-      keyPair.publicKey,
-    );
+    final publicKeyBytes = await _keyService.exportPublicKey(keyPair.publicKey);
 
-    await _keyService.storePrivateKey(
-      keyPair.privateKey,
-    );
+    await _keyService.storePrivateKey(keyPair.privateKey);
 
     return OfflinkIdentity(
       nodeId: nodeId,
@@ -41,10 +35,6 @@ class IdentityInitializationService {
   }
 
   String _encodePublicKey(List<int> bytes) {
-    return bytes
-        .map(
-          (byte) => byte.toRadixString(16).padLeft(2, '0'),
-        )
-        .join();
+    return bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
   }
 }
