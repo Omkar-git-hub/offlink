@@ -17,9 +17,7 @@ class OfflinkApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const Scaffold(
-        body: Center(child: Text('Offlink — Phase 0')),
-      ),
+      home: const Scaffold(body: Center(child: Text('Offlink — Phase 0'))),
     );
   }
 }
