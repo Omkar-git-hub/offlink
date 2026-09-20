@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'bluetooth/flutter_blue_plus_device_connection.dart';
+import 'bluetooth/phone_ble_connection.dart';
 import 'core/identity/node_id_generator.dart';
 import 'crypto/identity/identity_key_service.dart';
 import 'data/identity/flutter_secure_identity_storage.dart';
@@ -31,8 +33,18 @@ Future<void> main() async {
 
   final identity = await identityManager.loadAndValidateIdentity();
 
+  final bleDeviceConnection = const FlutterBluePlusDeviceConnection();
+
+  final bleConnection = PhoneBleConnection(
+    deviceConnection: bleDeviceConnection,
+  );
+
   runApp(
-    OfflinkApp(identityManager: identityManager, hasIdentity: identity != null),
+    OfflinkApp(
+      identityManager: identityManager,
+      hasIdentity: identity != null,
+      bleConnection: bleConnection,
+    ),
   );
 }
 
@@ -41,10 +53,12 @@ class OfflinkApp extends StatefulWidget {
     super.key,
     required this.identityManager,
     required this.hasIdentity,
+    required this.bleConnection,
   });
 
   final IdentityManager identityManager;
   final bool hasIdentity;
+  final PhoneBleConnection bleConnection;
 
   @override
   State<OfflinkApp> createState() => _OfflinkAppState();
@@ -69,6 +83,12 @@ class _OfflinkAppState extends State<OfflinkApp> {
     setState(() {
       _hasIdentity = true;
     });
+  }
+
+  @override
+  void dispose() {
+    widget.bleConnection.dispose();
+    super.dispose();
   }
 
   @override
