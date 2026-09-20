@@ -7,10 +7,7 @@ abstract interface class Transport {
 
   Future<void> disconnect(String peerId);
 
-  Future<void> send({
-    required String peerId,
-    required List<int> data,
-  });
+  Future<void> send({required String peerId, required List<int> data});
 
   Stream<List<int>> get incomingPackets;
 }
