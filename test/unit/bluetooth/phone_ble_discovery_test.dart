@@ -161,10 +161,7 @@ void main() {
         advertiser: advertiser,
       );
 
-      expect(
-        discovery.discoveredPeers,
-        isA<Stream<BlePeer>>(),
-      );
+      expect(discovery.discoveredPeers, isA<Stream<BlePeer>>());
 
       await discovery.dispose();
       await scanner.dispose();
@@ -179,10 +176,7 @@ void main() {
         advertiser: advertiser,
       );
 
-      expect(
-        discovery.discoveryEvents,
-        isA<Stream<BleDiscoveryEvent>>(),
-      );
+      expect(discovery.discoveryEvents, isA<Stream<BleDiscoveryEvent>>());
 
       await discovery.dispose();
       await scanner.dispose();
@@ -198,9 +192,7 @@ void main() {
       );
 
       expect(
-        discovery.isOfflinkService(
-          '00000000-0000-0000-0000-000000000000',
-        ),
+        discovery.isOfflinkService('00000000-0000-0000-0000-000000000000'),
         isTrue,
       );
 
@@ -218,9 +210,7 @@ void main() {
       );
 
       expect(
-        discovery.isOfflinkService(
-          '11111111-1111-1111-1111-111111111111',
-        ),
+        discovery.isOfflinkService('11111111-1111-1111-1111-111111111111'),
         isFalse,
       );
 
@@ -256,11 +246,9 @@ void main() {
 
       await discovery.startScanning();
 
-      final firstCycleLostPeerIds =
-          await discovery.completeScanCycle();
+      final firstCycleLostPeerIds = await discovery.completeScanCycle();
 
-      final secondCycleLostPeerIds =
-          await discovery.completeScanCycle();
+      final secondCycleLostPeerIds = await discovery.completeScanCycle();
 
       expect(firstCycleLostPeerIds, isEmpty);
       expect(secondCycleLostPeerIds, isEmpty);
@@ -304,10 +292,7 @@ void main() {
 
     await discovery.startScanning();
 
-    expect(
-      scanner.startedWithServices,
-      hasLength(1),
-    );
+    expect(scanner.startedWithServices, hasLength(1));
 
     expect(
       scanner.startedWithServices.first.toString().toLowerCase(),

@@ -33,8 +33,9 @@ class _HomePageState extends State<HomePage> {
 
     _discovery = PhoneBleDiscovery();
 
-    _discoverySubscription =
-        _discovery.discoveryEvents.listen(_handleDiscoveryEvent);
+    _discoverySubscription = _discovery.discoveryEvents.listen(
+      _handleDiscoveryEvent,
+    );
 
     _startBle();
   }
@@ -114,9 +115,7 @@ class _HomePageState extends State<HomePage> {
           _nearbyPeers[existingIndex] = event.peer;
         }
       } else if (event.type == BleDiscoveryEventType.lost) {
-        _nearbyPeers.removeWhere(
-          (peer) => peer.peerId == event.peer.peerId,
-        );
+        _nearbyPeers.removeWhere((peer) => peer.peerId == event.peer.peerId);
       }
     });
   }
@@ -191,10 +190,7 @@ class _HomePageState extends State<HomePage> {
           children: [
             const Text(
               'Offlink BLE',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             _buildStatusRow(
@@ -212,9 +208,7 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 16),
               Text(
                 _errorMessage!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                ),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],
           ],
@@ -238,18 +232,11 @@ class _HomePageState extends State<HomePage> {
               : Theme.of(context).colorScheme.outline,
         ),
         const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 16),
-          ),
-        ),
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 16))),
         Icon(
           enabled ? Icons.check_circle : Icons.cancel,
           size: 20,
-          color: enabled
-              ? Colors.green
-              : Theme.of(context).colorScheme.outline,
+          color: enabled ? Colors.green : Theme.of(context).colorScheme.outline,
         ),
       ],
     );
@@ -292,9 +279,7 @@ class _HomePageState extends State<HomePage> {
             Text(
               'Keep Bluetooth enabled and bring another Offlink device nearby.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.outline,
-              ),
+              style: TextStyle(color: Theme.of(context).colorScheme.outline),
             ),
           ],
         ),
@@ -305,17 +290,13 @@ class _HomePageState extends State<HomePage> {
   Widget _buildPeerTile(BlePeer peer) {
     return Card(
       child: ListTile(
-        leading: const CircleAvatar(
-          child: Icon(Icons.person),
-        ),
+        leading: const CircleAvatar(child: Icon(Icons.person)),
         title: Text(
           peer.displayName.isNotEmpty
               ? peer.displayName
               : 'Unknown Offlink User',
         ),
-        subtitle: Text(
-          'Signal: ${peer.signalStrength} dBm',
-        ),
+        subtitle: Text('Signal: ${peer.signalStrength} dBm'),
         trailing: const Icon(Icons.bluetooth),
       ),
     );
