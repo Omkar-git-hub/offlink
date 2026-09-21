@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'bluetooth/ble_packet_transport.dart';
 import 'bluetooth/flutter_blue_plus_device_connection.dart';
 import 'bluetooth/phone_ble_connection.dart';
 import 'core/identity/node_id_generator.dart';
@@ -39,11 +40,16 @@ Future<void> main() async {
     deviceConnection: bleDeviceConnection,
   );
 
+  final packetTransport = BlePacketTransport(
+    deviceConnection: bleDeviceConnection,
+  );
+
   runApp(
     OfflinkApp(
       identityManager: identityManager,
       hasIdentity: identity != null,
       bleConnection: bleConnection,
+      packetTransport: packetTransport,
     ),
   );
 }
@@ -54,11 +60,13 @@ class OfflinkApp extends StatefulWidget {
     required this.identityManager,
     required this.hasIdentity,
     required this.bleConnection,
+    required this.packetTransport,
   });
 
   final IdentityManager identityManager;
   final bool hasIdentity;
   final PhoneBleConnection bleConnection;
+  final BlePacketTransport packetTransport;
 
   @override
   State<OfflinkApp> createState() => _OfflinkAppState();
@@ -87,6 +95,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
 
   @override
   void dispose() {
+    widget.packetTransport.dispose();
     widget.bleConnection.dispose();
     super.dispose();
   }
@@ -101,7 +110,10 @@ class _OfflinkAppState extends State<OfflinkApp> {
         useMaterial3: true,
       ),
       home: _hasIdentity
-          ? const HomePage()
+          ? HomePage(
+              bleConnection: widget.bleConnection,
+              packetTransport: widget.packetTransport,
+            )
           : OnboardingPage(onContinue: _createIdentity),
     );
   }

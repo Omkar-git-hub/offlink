@@ -4,10 +4,19 @@ import 'package:flutter/material.dart';
 
 import '../bluetooth/ble_discovery_event.dart';
 import '../bluetooth/ble_models.dart';
+import '../bluetooth/ble_packet_transport.dart';
+import '../bluetooth/phone_ble_connection.dart';
 import '../bluetooth/phone_ble_discovery.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({
+    super.key,
+    required this.bleConnection,
+    required this.packetTransport,
+  });
+
+  final PhoneBleConnection bleConnection;
+  final BlePacketTransport packetTransport;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -17,8 +26,12 @@ class _HomePageState extends State<HomePage> {
   late final PhoneBleDiscovery _discovery;
 
   StreamSubscription<BleDiscoveryEvent>? _discoverySubscription;
+  StreamSubscription<dynamic>? _connectionSubscription;
+  StreamSubscription<dynamic>? _incomingPacketSubscription;
 
   final List<BlePeer> _nearbyPeers = [];
+  final Set<String> _connectingPeerIds = {};
+  final Set<String> _connectedPeerIds = {};
 
   bool _isScanning = false;
   bool _isAdvertising = false;
@@ -35,6 +48,20 @@ class _HomePageState extends State<HomePage> {
 
     _discoverySubscription = _discovery.discoveryEvents.listen(
       _handleDiscoveryEvent,
+    );
+
+    _connectionSubscription = widget.bleConnection.connectionStates.listen((_) {
+      if (!mounted || _isDisposed) {
+        return;
+      }
+
+      setState(() {});
+    });
+
+    _incomingPacketSubscription = widget.packetTransport.incomingPackets.listen(
+      (packet) {
+        debugPrint('[Offlink Packet] Received: ${packet.messageId}');
+      },
     );
 
     _startBle();
@@ -116,8 +143,97 @@ class _HomePageState extends State<HomePage> {
         }
       } else if (event.type == BleDiscoveryEventType.lost) {
         _nearbyPeers.removeWhere((peer) => peer.peerId == event.peer.peerId);
+
+        _connectingPeerIds.remove(event.peer.peerId);
+        _connectedPeerIds.remove(event.peer.peerId);
       }
     });
+  }
+
+  Future<void> _connectToPeer(BlePeer peer) async {
+    if (_isDisposed ||
+        _connectingPeerIds.contains(peer.peerId) ||
+        _connectedPeerIds.contains(peer.peerId)) {
+      return;
+    }
+
+    setState(() {
+      _errorMessage = null;
+      _connectingPeerIds.add(peer.peerId);
+    });
+
+    try {
+      debugPrint('[Offlink BLE] Connecting to peer: ${peer.peerId}');
+
+      await widget.bleConnection.connect(peer);
+
+      debugPrint('[Offlink Packet] Initializing channel for: ${peer.peerId}');
+
+      await widget.packetTransport.initializePeer(peer.peerId);
+
+      if (!mounted || _isDisposed) {
+        return;
+      }
+
+      setState(() {
+        _connectingPeerIds.remove(peer.peerId);
+        _connectedPeerIds.add(peer.peerId);
+      });
+
+      debugPrint('[Offlink BLE] Connected to peer: ${peer.peerId}');
+
+      debugPrint('[Offlink Packet] Packet channel ready: ${peer.peerId}');
+    } catch (error) {
+      if (!mounted || _isDisposed) {
+        return;
+      }
+
+      try {
+        await widget.bleConnection.disconnect(peer.peerId);
+      } catch (_) {
+        // Ignore cleanup failure.
+      }
+
+      setState(() {
+        _connectingPeerIds.remove(peer.peerId);
+        _connectedPeerIds.remove(peer.peerId);
+        _errorMessage = 'Unable to connect to ${peer.displayName}: $error';
+      });
+
+      debugPrint('[Offlink BLE] Connection failed for ${peer.peerId}: $error');
+    }
+  }
+
+  Future<void> _disconnectFromPeer(BlePeer peer) async {
+    if (_isDisposed || !_connectedPeerIds.contains(peer.peerId)) {
+      return;
+    }
+
+    try {
+      debugPrint('[Offlink BLE] Disconnecting from peer: ${peer.peerId}');
+
+      await widget.packetTransport.removePeer(peer.peerId);
+
+      await widget.bleConnection.disconnect(peer.peerId);
+
+      if (!mounted || _isDisposed) {
+        return;
+      }
+
+      setState(() {
+        _connectedPeerIds.remove(peer.peerId);
+      });
+
+      debugPrint('[Offlink BLE] Disconnected from peer: ${peer.peerId}');
+    } catch (error) {
+      if (!mounted || _isDisposed) {
+        return;
+      }
+
+      setState(() {
+        _errorMessage = 'Unable to disconnect from ${peer.displayName}: $error';
+      });
+    }
   }
 
   Future<void> _refreshNearbyPeers() async {
@@ -148,6 +264,9 @@ class _HomePageState extends State<HomePage> {
     _isDisposed = true;
 
     _discoverySubscription?.cancel();
+    _connectionSubscription?.cancel();
+    _incomingPacketSubscription?.cancel();
+
     _discovery.dispose();
 
     super.dispose();
@@ -288,16 +407,37 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildPeerTile(BlePeer peer) {
+    final isConnecting = _connectingPeerIds.contains(peer.peerId);
+    final isConnected = _connectedPeerIds.contains(peer.peerId);
+
     return Card(
       child: ListTile(
-        leading: const CircleAvatar(child: Icon(Icons.person)),
+        leading: CircleAvatar(
+          child: Icon(isConnected ? Icons.bluetooth_connected : Icons.person),
+        ),
         title: Text(
           peer.displayName.isNotEmpty
               ? peer.displayName
               : 'Unknown Offlink User',
         ),
-        subtitle: Text('Signal: ${peer.signalStrength} dBm'),
-        trailing: const Icon(Icons.bluetooth),
+        subtitle: Text(
+          isConnected ? 'Connected' : 'Signal: ${peer.signalStrength} dBm',
+        ),
+        trailing: isConnecting
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : isConnected
+            ? TextButton(
+                onPressed: () => _disconnectFromPeer(peer),
+                child: const Text('Disconnect'),
+              )
+            : FilledButton(
+                onPressed: () => _connectToPeer(peer),
+                child: const Text('Connect'),
+              ),
       ),
     );
   }
