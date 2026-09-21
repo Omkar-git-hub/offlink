@@ -16,6 +16,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Secret detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -28,6 +35,10 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Check dependency vulnerabilities
+        run: |
+          dart pub outdated
 
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
