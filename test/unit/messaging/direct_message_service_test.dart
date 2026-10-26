@@ -1,8 +1,12 @@
 import 'dart:async';
 
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:offlink/core/identity/node_id_generator.dart';
 import 'package:offlink/crypto/identity/identity_key_service.dart';
+import 'package:offlink/data/database/drift_conversation_repository.dart';
+import 'package:offlink/data/database/drift_message_repository.dart';
+import 'package:offlink/data/database/offlink_database.dart';
 import 'package:offlink/domain/identity/identity_initialization_service.dart';
 import 'package:offlink/domain/identity/identity_manager.dart';
 import 'package:offlink/domain/identity/identity_repository.dart';
@@ -176,5 +180,68 @@ void main() {
       expect(messages, isEmpty);
       await subscription.cancel();
     });
+
+    test(
+      'persists sent and received messages to repositories when provided',
+      () async {
+        final db = OfflinkDatabase.forTesting(NativeDatabase.memory());
+        final msgRepo = DriftMessageRepository(db);
+        final convRepo = DriftConversationRepository(db);
+
+        final persistingService = DirectMessageService(
+          packetTransport: transport,
+          identityManager: identityManager,
+          messageRepository: msgRepo,
+          conversationRepository: convRepo,
+        );
+
+        // 1. Send message
+        await persistingService.sendMessage(
+          peerId: 'peer-device-bob',
+          recipientNodeId: 'node-bob-5678',
+          content: 'Persisted hello',
+        );
+
+        final conversationsAfterSend = await convRepo.getAllConversations();
+        expect(conversationsAfterSend, hasLength(1));
+        expect(conversationsAfterSend.first.peerNodeId, 'node-bob-5678');
+        expect(conversationsAfterSend.first.lastMessage, 'Persisted hello');
+
+        final messagesAfterSend = await msgRepo.getMessagesForConversation(
+          'node-bob-5678',
+        );
+        expect(messagesAfterSend, hasLength(1));
+        expect(messagesAfterSend.first.content, 'Persisted hello');
+        expect(messagesAfterSend.first.isOutgoing, isTrue);
+
+        // 2. Receive message
+        final packet = OfflinkPacket(
+          messageId: 'incoming-persisted-1',
+          senderNodeId: 'node-bob-5678',
+          recipientNodeId: 'node-alice-1234',
+          messageType: OfflinkMessageType.text,
+          timestamp: DateTime.utc(2026, 10, 27, 10, 30),
+          ttl: 3,
+          payload: 'Persisted reply',
+        );
+
+        transport.emit(packet);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        final conversationsAfterReceive = await convRepo.getAllConversations();
+        expect(conversationsAfterReceive.first.lastMessage, 'Persisted reply');
+        expect(conversationsAfterReceive.first.unreadCount, 1);
+
+        final messagesAfterReceive = await msgRepo.getMessagesForConversation(
+          'node-bob-5678',
+        );
+        expect(messagesAfterReceive, hasLength(2));
+        expect(messagesAfterReceive.last.content, 'Persisted reply');
+        expect(messagesAfterReceive.last.isOutgoing, isFalse);
+
+        persistingService.dispose();
+        await db.close();
+      },
+    );
   });
 }

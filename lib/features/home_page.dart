@@ -8,6 +8,7 @@ import '../bluetooth/ble_packet_transport.dart';
 import '../bluetooth/phone_ble_connection.dart';
 import '../bluetooth/phone_ble_discovery.dart';
 import '../domain/identity/identity_manager.dart';
+import '../domain/messaging/message_repository.dart';
 import '../domain/messaging/message_service.dart';
 import '../domain/protocol/offlink_message_type.dart';
 import '../domain/protocol/offlink_packet.dart';
@@ -20,12 +21,14 @@ class HomePage extends StatefulWidget {
     required this.packetTransport,
     this.identityManager,
     this.messageService,
+    this.messageRepository,
   });
 
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
   final IdentityManager? identityManager;
   final MessageService? messageService;
+  final MessageRepository? messageRepository;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -276,6 +279,7 @@ class _HomePageState extends State<HomePage> {
         builder: (context) => ChatPage(
           peer: peer,
           messageService: messageService,
+          messageRepository: widget.messageRepository,
           isConnected: _connectedPeerIds.contains(peer.peerId),
         ),
       ),

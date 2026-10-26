@@ -37,3 +37,15 @@ This document records durable architectural, protocol, security, and compatibili
   - The UI protects against duplicate sends via an async `_isSending` lock on the send button.
   - Module 3 will layer persistent SQLite/Drift storage beneath or alongside `MessageService` without requiring UI or transport redesign.
 - **Status**: Implemented in Module 2 (`feature/direct-messaging`).
+
+---
+
+## DECISION-005: Drift SQLite Database & Repository Architecture
+- **Context**: Offlink requires persistent local storage for message and conversation history that survives app restarts, supports chronological retrieval, unread tracking, cascade deletion, and asynchronous stream updates.
+- **Decision**:
+  - Implement SQLite persistence using `Drift` with strongly typed tables: `ConversationsTable` and `MessagesTable`.
+  - Enable SQLite foreign keys (`PRAGMA foreign_keys = ON`) in `beforeOpen` with cascade deletion from conversations to messages.
+  - Abstract data access behind domain interfaces: `ConversationRepository` and `MessageRepository`.
+  - All DateTime columns are normalized to UTC upon retrieval (`.toUtc()`) to ensure consistent ordering and timestamp comparison across diverse device locales.
+  - Inject repositories into `DirectMessageService` and `ChatPage` to automatically persist messages on send and receive, and preload conversation history on chat launch without coupling UI components to Drift.
+- **Status**: Implemented in Module 3 (`feature/local-message-storage`).
