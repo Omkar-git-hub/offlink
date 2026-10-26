@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:offlink/bluetooth/ble_models.dart';
 import 'package:offlink/domain/messaging/chat_message.dart';
+import 'package:offlink/domain/messaging/message_repository.dart';
 import 'package:offlink/domain/messaging/message_service.dart';
 import 'package:offlink/features/chat/chat_page.dart';
 
@@ -59,6 +60,43 @@ class MockMessageService implements MessageService {
   @override
   void dispose() {
     _incomingController.close();
+  }
+}
+
+class MockMessageRepository implements MessageRepository {
+  final List<ChatMessage> messages = [];
+
+  @override
+  Future<void> saveMessage(
+    ChatMessage message, {
+    required String conversationId,
+  }) async {
+    messages.add(message);
+  }
+
+  @override
+  Future<List<ChatMessage>> getMessagesForConversation(
+    String conversationId, {
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    return List.from(messages);
+  }
+
+  @override
+  Future<void> updateMessageStatus(
+    String messageId,
+    ChatMessageStatus status,
+  ) async {}
+
+  @override
+  Stream<List<ChatMessage>> watchMessagesForConversation(
+    String conversationId,
+  ) => Stream.value(messages);
+
+  @override
+  Future<void> deleteMessagesForConversation(String conversationId) async {
+    messages.clear();
   }
 }
 
@@ -220,6 +258,48 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Failed to send message'), findsOneWidget);
+    });
+
+    testWidgets('loads and renders persisted message history on start', (
+      tester,
+    ) async {
+      final mockRepo = MockMessageRepository();
+      mockRepo.messages.addAll([
+        ChatMessage(
+          id: 'hist-1',
+          conversationId: testPeer.peerId,
+          senderNodeId: testPeer.peerId,
+          recipientNodeId: 'local-node',
+          content: 'Persisted incoming message',
+          timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+          isOutgoing: false,
+          status: ChatMessageStatus.delivered,
+        ),
+        ChatMessage(
+          id: 'hist-2',
+          conversationId: testPeer.peerId,
+          senderNodeId: 'local-node',
+          recipientNodeId: testPeer.peerId,
+          content: 'Persisted outgoing reply',
+          timestamp: DateTime.now().subtract(const Duration(minutes: 3)),
+          isOutgoing: true,
+          status: ChatMessageStatus.sent,
+        ),
+      ]);
+
+      await tester.pumpWidget(
+        createTestApp(
+          ChatPage(
+            peer: testPeer,
+            messageService: messageService,
+            messageRepository: mockRepo,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Persisted incoming message'), findsOneWidget);
+      expect(find.text('Persisted outgoing reply'), findsOneWidget);
     });
   });
 }

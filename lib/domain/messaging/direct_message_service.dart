@@ -7,14 +7,21 @@ import '../protocol/offlink_message_type.dart';
 import '../protocol/offlink_packet.dart';
 import '../protocol/packet_transport.dart';
 import 'chat_message.dart';
+import 'conversation.dart';
+import 'conversation_repository.dart';
+import 'message_repository.dart';
 import 'message_service.dart';
 
 class DirectMessageService implements MessageService {
   DirectMessageService({
     required PacketTransport packetTransport,
     required IdentityManager identityManager,
+    MessageRepository? messageRepository,
+    ConversationRepository? conversationRepository,
   }) : _packetTransport = packetTransport,
-       _identityManager = identityManager {
+       _identityManager = identityManager,
+       _messageRepository = messageRepository,
+       _conversationRepository = conversationRepository {
     _subscription = _packetTransport.incomingPackets.listen(
       _handleIncomingPacket,
     );
@@ -22,6 +29,8 @@ class DirectMessageService implements MessageService {
 
   final PacketTransport _packetTransport;
   final IdentityManager _identityManager;
+  final MessageRepository? _messageRepository;
+  final ConversationRepository? _conversationRepository;
 
   final StreamController<ChatMessage> _incomingMessagesController =
       StreamController<ChatMessage>.broadcast();
@@ -32,7 +41,7 @@ class DirectMessageService implements MessageService {
   Stream<ChatMessage> get incomingMessages =>
       _incomingMessagesController.stream;
 
-  void _handleIncomingPacket(OfflinkPacket packet) {
+  Future<void> _handleIncomingPacket(OfflinkPacket packet) async {
     if (packet.messageType != OfflinkMessageType.text) {
       return;
     }
@@ -47,6 +56,30 @@ class DirectMessageService implements MessageService {
       isOutgoing: false,
       status: ChatMessageStatus.delivered,
     );
+
+    if (_conversationRepository != null) {
+      final existing = await _conversationRepository.getConversationByPeer(
+        packet.senderNodeId,
+      );
+      final conversation = Conversation(
+        id: existing?.id ?? packet.senderNodeId,
+        peerNodeId: packet.senderNodeId,
+        peerDisplayName:
+            existing?.peerDisplayName ??
+            'Peer ${packet.senderNodeId.length > 8 ? packet.senderNodeId.substring(0, 8) : packet.senderNodeId}',
+        lastMessage: packet.payload,
+        unreadCount: (existing?.unreadCount ?? 0) + 1,
+        updatedAt: packet.timestamp,
+      );
+      await _conversationRepository.upsertConversation(conversation);
+    }
+
+    if (_messageRepository != null) {
+      await _messageRepository.saveMessage(
+        message,
+        conversationId: packet.senderNodeId,
+      );
+    }
 
     _incomingMessagesController.add(message);
   }
@@ -77,9 +110,7 @@ class DirectMessageService implements MessageService {
       payload: trimmedContent,
     );
 
-    await _packetTransport.sendPacket(peerId: peerId, packet: packet);
-
-    return ChatMessage(
+    final message = ChatMessage(
       id: messageId,
       conversationId: recipientNodeId,
       senderNodeId: localNodeId,
@@ -89,6 +120,34 @@ class DirectMessageService implements MessageService {
       isOutgoing: true,
       status: ChatMessageStatus.sent,
     );
+
+    if (_conversationRepository != null) {
+      final existing = await _conversationRepository.getConversationByPeer(
+        recipientNodeId,
+      );
+      final conversation = Conversation(
+        id: existing?.id ?? recipientNodeId,
+        peerNodeId: recipientNodeId,
+        peerDisplayName:
+            existing?.peerDisplayName ??
+            'Peer ${recipientNodeId.length > 8 ? recipientNodeId.substring(0, 8) : recipientNodeId}',
+        lastMessage: trimmedContent,
+        unreadCount: existing?.unreadCount ?? 0,
+        updatedAt: now,
+      );
+      await _conversationRepository.upsertConversation(conversation);
+    }
+
+    if (_messageRepository != null) {
+      await _messageRepository.saveMessage(
+        message,
+        conversationId: recipientNodeId,
+      );
+    }
+
+    await _packetTransport.sendPacket(peerId: peerId, packet: packet);
+
+    return message;
   }
 
   @override

@@ -6,11 +6,15 @@ import 'bluetooth/flutter_blue_plus_device_connection.dart';
 import 'bluetooth/phone_ble_connection.dart';
 import 'core/identity/node_id_generator.dart';
 import 'crypto/identity/identity_key_service.dart';
+import 'data/database/drift_conversation_repository.dart';
+import 'data/database/drift_message_repository.dart';
+import 'data/database/offlink_database.dart';
 import 'data/identity/flutter_secure_identity_storage.dart';
 import 'data/identity/secure_identity_repository.dart';
 import 'domain/identity/identity_initialization_service.dart';
 import 'domain/identity/identity_manager.dart';
 import 'domain/messaging/direct_message_service.dart';
+import 'domain/messaging/message_repository.dart';
 import 'domain/messaging/message_service.dart';
 import 'features/home_page.dart';
 import 'features/onboarding/onboarding_page.dart';
@@ -50,9 +54,15 @@ Future<void> main() async {
     peripheralChannel: peripheralChannel,
   );
 
+  final database = OfflinkDatabase();
+  final messageRepository = DriftMessageRepository(database);
+  final conversationRepository = DriftConversationRepository(database);
+
   final messageService = DirectMessageService(
     packetTransport: packetTransport,
     identityManager: identityManager,
+    messageRepository: messageRepository,
+    conversationRepository: conversationRepository,
   );
 
   runApp(
@@ -62,6 +72,8 @@ Future<void> main() async {
       bleConnection: bleConnection,
       packetTransport: packetTransport,
       messageService: messageService,
+      messageRepository: messageRepository,
+      database: database,
     ),
   );
 }
@@ -74,6 +86,8 @@ class OfflinkApp extends StatefulWidget {
     required this.bleConnection,
     required this.packetTransport,
     required this.messageService,
+    this.messageRepository,
+    this.database,
   });
 
   final IdentityManager identityManager;
@@ -81,6 +95,8 @@ class OfflinkApp extends StatefulWidget {
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
   final MessageService messageService;
+  final MessageRepository? messageRepository;
+  final OfflinkDatabase? database;
 
   @override
   State<OfflinkApp> createState() => _OfflinkAppState();
@@ -112,6 +128,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
     widget.messageService.dispose();
     widget.packetTransport.dispose();
     widget.bleConnection.dispose();
+    widget.database?.close();
     super.dispose();
   }
 
@@ -130,6 +147,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
               packetTransport: widget.packetTransport,
               identityManager: widget.identityManager,
               messageService: widget.messageService,
+              messageRepository: widget.messageRepository,
             )
           : OnboardingPage(onContinue: _createIdentity),
     );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../bluetooth/ble_models.dart';
 import '../../domain/messaging/chat_message.dart';
+import '../../domain/messaging/message_repository.dart';
 import '../../domain/messaging/message_service.dart';
 
 class ChatPage extends StatefulWidget {
@@ -11,11 +12,13 @@ class ChatPage extends StatefulWidget {
     super.key,
     required this.peer,
     required this.messageService,
+    this.messageRepository,
     this.isConnected = true,
   });
 
   final BlePeer peer;
   final MessageService messageService;
+  final MessageRepository? messageRepository;
   final bool isConnected;
 
   @override
@@ -37,6 +40,29 @@ class _ChatPageState extends State<ChatPage> {
     _messageSubscription = widget.messageService.incomingMessages.listen(
       _handleIncomingMessage,
     );
+
+    if (widget.messageRepository != null) {
+      _loadPersistedHistory();
+    }
+  }
+
+  Future<void> _loadPersistedHistory() async {
+    try {
+      final history = await widget.messageRepository!
+          .getMessagesForConversation(widget.peer.peerId);
+      if (!mounted) return;
+      setState(() {
+        for (final msg in history) {
+          if (!_messages.any((m) => m.id == msg.id)) {
+            _messages.add(msg);
+          }
+        }
+        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      });
+      _scrollToBottom();
+    } catch (_) {
+      // Gracefully handle persistence retrieval errors
+    }
   }
 
   void _handleIncomingMessage(ChatMessage message) {
@@ -45,10 +71,13 @@ class _ChatPageState extends State<ChatPage> {
     }
 
     // Accept message if it comes from this peer or is directed to this conversation
-    if (message.senderNodeId == widget.peer.peerId ||
-        message.conversationId == widget.peer.peerId) {
+    if ((message.senderNodeId == widget.peer.peerId ||
+            message.conversationId == widget.peer.peerId) &&
+        !_messages.any((m) => m.id == message.id)) {
       setState(() {
-        _messages.add(message);
+        if (!_messages.any((m) => m.id == message.id)) {
+          _messages.add(message);
+        }
       });
       _scrollToBottom();
     }
@@ -82,7 +111,9 @@ class _ChatPageState extends State<ChatPage> {
       }
 
       setState(() {
-        _messages.add(message);
+        if (!_messages.any((m) => m.id == message.id)) {
+          _messages.add(message);
+        }
       });
       _scrollToBottom();
     } catch (error) {
