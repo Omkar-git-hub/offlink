@@ -8,8 +8,10 @@ import '../bluetooth/ble_packet_transport.dart';
 import '../bluetooth/phone_ble_connection.dart';
 import '../bluetooth/phone_ble_discovery.dart';
 import '../domain/identity/identity_manager.dart';
+import '../domain/messaging/message_service.dart';
 import '../domain/protocol/offlink_message_type.dart';
 import '../domain/protocol/offlink_packet.dart';
+import 'chat/chat_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -17,11 +19,13 @@ class HomePage extends StatefulWidget {
     required this.bleConnection,
     required this.packetTransport,
     this.identityManager,
+    this.messageService,
   });
 
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
   final IdentityManager? identityManager;
+  final MessageService? messageService;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -261,6 +265,23 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  void _openChat(BlePeer peer) {
+    final messageService = widget.messageService;
+    if (messageService == null) {
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ChatPage(
+          peer: peer,
+          messageService: messageService,
+          isConnected: _connectedPeerIds.contains(peer.peerId),
+        ),
+      ),
+    );
+  }
+
   Future<void> _sendTestPacket(BlePeer peer) async {
     final identity = widget.identityManager?.currentIdentity;
     final senderNodeId = identity?.nodeId ?? 'node-local';
@@ -475,13 +496,28 @@ class _HomePageState extends State<HomePage> {
               style: const TextStyle(fontStyle: FontStyle.italic),
             ),
             const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.tonalIcon(
-                onPressed: _replyToLastPacket,
-                icon: const Icon(Icons.reply, size: 18),
-                label: const Text('Reply with Pong'),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (widget.messageService != null) ...[
+                  OutlinedButton.icon(
+                    onPressed: () => _openChat(
+                      BlePeer(
+                        peerId: packet.senderNodeId,
+                        displayName: 'Sender $senderLabel',
+                      ),
+                    ),
+                    icon: const Icon(Icons.chat, size: 18),
+                    label: const Text('Open Chat'),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                FilledButton.tonalIcon(
+                  onPressed: _replyToLastPacket,
+                  icon: const Icon(Icons.reply, size: 18),
+                  label: const Text('Reply with Pong'),
+                ),
+              ],
             ),
           ],
         ),
@@ -565,6 +601,9 @@ class _HomePageState extends State<HomePage> {
 
     return Card(
       child: ListTile(
+        onTap: isConnected && widget.messageService != null
+            ? () => _openChat(peer)
+            : null,
         leading: CircleAvatar(
           child: Icon(isConnected ? Icons.bluetooth_connected : Icons.person),
         ),
@@ -587,6 +626,12 @@ class _HomePageState extends State<HomePage> {
                 spacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
+                  if (widget.messageService != null)
+                    FilledButton.icon(
+                      onPressed: () => _openChat(peer),
+                      icon: const Icon(Icons.chat, size: 16),
+                      label: const Text('Chat'),
+                    ),
                   FilledButton.tonal(
                     onPressed: () => _sendTestPacket(peer),
                     child: const Text('Send Ping'),

@@ -10,6 +10,8 @@ import 'data/identity/flutter_secure_identity_storage.dart';
 import 'data/identity/secure_identity_repository.dart';
 import 'domain/identity/identity_initialization_service.dart';
 import 'domain/identity/identity_manager.dart';
+import 'domain/messaging/direct_message_service.dart';
+import 'domain/messaging/message_service.dart';
 import 'features/home_page.dart';
 import 'features/onboarding/onboarding_page.dart';
 
@@ -48,12 +50,18 @@ Future<void> main() async {
     peripheralChannel: peripheralChannel,
   );
 
+  final messageService = DirectMessageService(
+    packetTransport: packetTransport,
+    identityManager: identityManager,
+  );
+
   runApp(
     OfflinkApp(
       identityManager: identityManager,
       hasIdentity: identity != null,
       bleConnection: bleConnection,
       packetTransport: packetTransport,
+      messageService: messageService,
     ),
   );
 }
@@ -65,12 +73,14 @@ class OfflinkApp extends StatefulWidget {
     required this.hasIdentity,
     required this.bleConnection,
     required this.packetTransport,
+    required this.messageService,
   });
 
   final IdentityManager identityManager;
   final bool hasIdentity;
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
+  final MessageService messageService;
 
   @override
   State<OfflinkApp> createState() => _OfflinkAppState();
@@ -99,6 +109,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
 
   @override
   void dispose() {
+    widget.messageService.dispose();
     widget.packetTransport.dispose();
     widget.bleConnection.dispose();
     super.dispose();
@@ -118,6 +129,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
               bleConnection: widget.bleConnection,
               packetTransport: widget.packetTransport,
               identityManager: widget.identityManager,
+              messageService: widget.messageService,
             )
           : OnboardingPage(onContinue: _createIdentity),
     );
