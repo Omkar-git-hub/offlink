@@ -6,8 +6,23 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'offlink_ble_service.dart';
 
-class BlePacketChannel {
-  BlePacketChannel(this._device);
+abstract interface class BlePacketChannel {
+  factory BlePacketChannel(BluetoothDevice device) =
+      FlutterBluePlusPacketChannel;
+
+  Stream<Uint8List> get incomingPackets;
+
+  Future<void> initialize();
+
+  Future<void> sendBytes(Uint8List data);
+
+  Future<void> sendText(String value);
+
+  Future<void> dispose();
+}
+
+class FlutterBluePlusPacketChannel implements BlePacketChannel {
+  FlutterBluePlusPacketChannel(this._device);
 
   final BluetoothDevice _device;
 
@@ -19,13 +34,21 @@ class BlePacketChannel {
   final StreamController<Uint8List> _incomingPackets =
       StreamController<Uint8List>.broadcast();
 
+  @override
   Stream<Uint8List> get incomingPackets => _incomingPackets.stream;
 
   bool _initialized = false;
 
+  @override
   Future<void> initialize() async {
     if (_initialized) {
       return;
+    }
+
+    try {
+      await _device.requestMtu(512);
+    } catch (_) {
+      // Ignore if MTU negotiation is not supported on this device/platform.
     }
 
     final services = await _device.discoverServices();
@@ -79,6 +102,7 @@ class BlePacketChannel {
     _initialized = true;
   }
 
+  @override
   Future<void> sendBytes(Uint8List data) async {
     if (!_initialized || _rxCharacteristic == null) {
       throw StateError('BLE packet channel has not been initialized.');
@@ -91,10 +115,12 @@ class BlePacketChannel {
     await _rxCharacteristic!.write(data, withoutResponse: false);
   }
 
+  @override
   Future<void> sendText(String value) async {
     await sendBytes(Uint8List.fromList(utf8.encode(value)));
   }
 
+  @override
   Future<void> dispose() async {
     await _notificationSubscription?.cancel();
     _notificationSubscription = null;

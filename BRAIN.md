@@ -135,7 +135,7 @@ Before changing code:
 
 ## 11. Current phase
 
-Phase 0: architecture, CI foundation, protocol/security review.
+Module 1: Mobile-to-Mobile Packet Exchange (`feature/protocol-ble-integration`).
 
 Next gate:
-Protocol + BLE + security + data model + battery strategy reviewed and accepted.
+Bidirectional packet exchange verified on physical Android devices -> Module 2: Direct Messaging and Chat UI.

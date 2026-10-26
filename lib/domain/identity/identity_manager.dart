@@ -1,7 +1,7 @@
+import '../../crypto/identity/identity_key_service.dart';
 import 'identity_initialization_service.dart';
 import 'identity_repository.dart';
 import 'offlink_identity.dart';
-import '../../crypto/identity/identity_key_service.dart';
 
 class IdentityManager {
   IdentityManager({
@@ -14,8 +14,14 @@ class IdentityManager {
   final IdentityInitializationService initializationService;
   final IdentityKeyService keyService;
 
-  Future<OfflinkIdentity?> loadExistingIdentity() {
-    return repository.loadIdentity();
+  OfflinkIdentity? _currentIdentity;
+
+  OfflinkIdentity? get currentIdentity => _currentIdentity;
+
+  Future<OfflinkIdentity?> loadExistingIdentity() async {
+    final identity = await repository.loadIdentity();
+    _currentIdentity = identity;
+    return identity;
   }
 
   Future<bool> hasIdentity() {
@@ -43,6 +49,7 @@ class IdentityManager {
       rethrow;
     }
 
+    _currentIdentity = identity;
     return identity;
   }
 
@@ -50,6 +57,7 @@ class IdentityManager {
     final identity = await repository.loadIdentity();
 
     if (identity == null) {
+      _currentIdentity = null;
       return null;
     }
 
@@ -65,14 +73,19 @@ class IdentityManager {
       throw StateError('Identity metadata and private key do not match.');
     }
 
+    _currentIdentity = identity;
     return identity;
   }
 
-  Future<void> updateUsername(String username) {
-    return repository.updateUsername(username);
+  Future<void> updateUsername(String username) async {
+    await repository.updateUsername(username);
+    if (_currentIdentity != null) {
+      _currentIdentity = _currentIdentity!.copyWith(username: username);
+    }
   }
 
   Future<void> clearIdentity() async {
+    _currentIdentity = null;
     await repository.clearIdentity();
     await keyService.deletePrivateKey();
   }
@@ -99,13 +112,13 @@ class IdentityManager {
     return bytes;
   }
 
-  bool _bytesEqual(List<int> first, List<int> second) {
-    if (first.length != second.length) {
+  bool _bytesEqual(List<int> a, List<int> b) {
+    if (a.length != b.length) {
       return false;
     }
 
-    for (var index = 0; index < first.length; index++) {
-      if (first[index] != second[index]) {
+    for (var index = 0; index < a.length; index++) {
+      if (a[index] != b[index]) {
         return false;
       }
     }

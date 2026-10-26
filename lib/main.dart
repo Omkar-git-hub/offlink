@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'bluetooth/ble_packet_transport.dart';
+import 'bluetooth/ble_peripheral_packet_channel.dart';
 import 'bluetooth/flutter_blue_plus_device_connection.dart';
 import 'bluetooth/phone_ble_connection.dart';
 import 'core/identity/node_id_generator.dart';
@@ -40,8 +41,11 @@ Future<void> main() async {
     deviceConnection: bleDeviceConnection,
   );
 
+  final peripheralChannel = FlutterBlePeripheralPacketChannel();
+
   final packetTransport = BlePacketTransport(
     deviceConnection: bleDeviceConnection,
+    peripheralChannel: peripheralChannel,
   );
 
   runApp(
@@ -113,6 +117,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
           ? HomePage(
               bleConnection: widget.bleConnection,
               packetTransport: widget.packetTransport,
+              identityManager: widget.identityManager,
             )
           : OnboardingPage(onContinue: _createIdentity),
     );

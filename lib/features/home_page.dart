@@ -7,16 +7,21 @@ import '../bluetooth/ble_models.dart';
 import '../bluetooth/ble_packet_transport.dart';
 import '../bluetooth/phone_ble_connection.dart';
 import '../bluetooth/phone_ble_discovery.dart';
+import '../domain/identity/identity_manager.dart';
+import '../domain/protocol/offlink_message_type.dart';
+import '../domain/protocol/offlink_packet.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
     super.key,
     required this.bleConnection,
     required this.packetTransport,
+    this.identityManager,
   });
 
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
+  final IdentityManager? identityManager;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -32,6 +37,8 @@ class _HomePageState extends State<HomePage> {
   final List<BlePeer> _nearbyPeers = [];
   final Set<String> _connectingPeerIds = {};
   final Set<String> _connectedPeerIds = {};
+
+  OfflinkPacket? _lastReceivedPacket;
 
   bool _isScanning = false;
   bool _isAdvertising = false;
@@ -58,11 +65,30 @@ class _HomePageState extends State<HomePage> {
       setState(() {});
     });
 
-    _incomingPacketSubscription = widget.packetTransport.incomingPackets.listen(
-      (packet) {
-        debugPrint('[Offlink Packet] Received: ${packet.messageId}');
-      },
-    );
+    _incomingPacketSubscription = widget.packetTransport.incomingPackets.listen((
+      packet,
+    ) {
+      debugPrint(
+        '[Offlink Packet] Received: ${packet.messageId} from ${packet.senderNodeId}',
+      );
+
+      if (!mounted || _isDisposed) {
+        return;
+      }
+
+      setState(() {
+        _lastReceivedPacket = packet;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Received packet from ${packet.senderNodeId.length > 8 ? packet.senderNodeId.substring(0, 8) : packet.senderNodeId}: "${packet.payload}"',
+          ),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    });
 
     _startBle();
   }
@@ -181,7 +207,6 @@ class _HomePageState extends State<HomePage> {
       });
 
       debugPrint('[Offlink BLE] Connected to peer: ${peer.peerId}');
-
       debugPrint('[Offlink Packet] Packet channel ready: ${peer.peerId}');
     } catch (error) {
       if (!mounted || _isDisposed) {
@@ -236,6 +261,91 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _sendTestPacket(BlePeer peer) async {
+    final identity = widget.identityManager?.currentIdentity;
+    final senderNodeId = identity?.nodeId ?? 'node-local';
+    final username = identity?.username ?? 'Offlink User';
+
+    final packet = OfflinkPacket(
+      messageId: 'ping-${DateTime.now().millisecondsSinceEpoch}',
+      senderNodeId: senderNodeId,
+      recipientNodeId: peer.peerId,
+      messageType: OfflinkMessageType.text,
+      timestamp: DateTime.now().toUtc(),
+      ttl: 3,
+      payload: 'Ping from $username',
+    );
+
+    try {
+      await widget.packetTransport.sendPacket(
+        peerId: peer.peerId,
+        packet: packet,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Packet sent to ${peer.displayName}')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send packet: $error'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _replyToLastPacket() async {
+    final lastPacket = _lastReceivedPacket;
+    if (lastPacket == null) {
+      return;
+    }
+
+    final identity = widget.identityManager?.currentIdentity;
+    final senderNodeId = identity?.nodeId ?? 'node-local';
+    final username = identity?.username ?? 'Offlink User';
+
+    final replyPacket = OfflinkPacket(
+      messageId: 'pong-${DateTime.now().millisecondsSinceEpoch}',
+      senderNodeId: senderNodeId,
+      recipientNodeId: lastPacket.senderNodeId,
+      messageType: OfflinkMessageType.text,
+      timestamp: DateTime.now().toUtc(),
+      ttl: 3,
+      payload: 'Pong reply from $username',
+    );
+
+    try {
+      await widget.packetTransport.sendPacket(
+        peerId: lastPacket.senderNodeId,
+        packet: replyPacket,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Reply sent to ${lastPacket.senderNodeId.length > 8 ? lastPacket.senderNodeId.substring(0, 8) : lastPacket.senderNodeId}',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send reply: $error'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _refreshNearbyPeers() async {
     if (_isDisposed) {
       return;
@@ -246,16 +356,6 @@ class _HomePageState extends State<HomePage> {
       _errorMessage = null;
     });
 
-    /*
-     * Do not stop and restart BLE here.
-     *
-     * BLE scanning and advertising are long-lived operations for the
-     * current HomePage session. Restarting them repeatedly can cause
-     * Android to reject scan registration because of excessive scan
-     * frequency.
-     *
-     * The refresh action only refreshes the UI state.
-     */
     await Future<void>.delayed(Duration.zero);
   }
 
@@ -292,6 +392,10 @@ class _HomePageState extends State<HomePage> {
           padding: const EdgeInsets.all(16),
           children: [
             _buildBleStatusCard(),
+            if (_lastReceivedPacket != null) ...[
+              const SizedBox(height: 16),
+              _buildLastReceivedPacketCard(),
+            ],
             const SizedBox(height: 20),
             _buildNearbySection(),
           ],
@@ -330,6 +434,55 @@ class _HomePageState extends State<HomePage> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLastReceivedPacketCard() {
+    final packet = _lastReceivedPacket!;
+    final senderLabel = packet.senderNodeId.length > 12
+        ? '${packet.senderNodeId.substring(0, 12)}...'
+        : packet.senderNodeId;
+
+    return Card(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.mark_email_read,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'Last Received Packet',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('From: $senderLabel'),
+            Text('Type: ${packet.messageType.value} (TTL: ${packet.ttl})'),
+            const SizedBox(height: 4),
+            Text(
+              'Payload: "${packet.payload}"',
+              style: const TextStyle(fontStyle: FontStyle.italic),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.tonalIcon(
+                onPressed: _replyToLastPacket,
+                icon: const Icon(Icons.reply, size: 18),
+                label: const Text('Reply with Pong'),
+              ),
+            ),
           ],
         ),
       ),
@@ -430,9 +583,19 @@ class _HomePageState extends State<HomePage> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : isConnected
-            ? TextButton(
-                onPressed: () => _disconnectFromPeer(peer),
-                child: const Text('Disconnect'),
+            ? Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  FilledButton.tonal(
+                    onPressed: () => _sendTestPacket(peer),
+                    child: const Text('Send Ping'),
+                  ),
+                  TextButton(
+                    onPressed: () => _disconnectFromPeer(peer),
+                    child: const Text('Disconnect'),
+                  ),
+                ],
               )
             : FilledButton(
                 onPressed: () => _connectToPeer(peer),
