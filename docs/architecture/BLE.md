@@ -6,7 +6,21 @@ A phone may need to act as:
 - BLE central/scanner
 - BLE peripheral/advertiser
 
-This is why both sides of the BLE stack are part of the architecture.
+Because two mobile devices can connect in either role, `BlePacketTransport` coordinates both:
+1. **Central Role (`BlePacketChannel`)**:
+   - Initiates connection via `flutter_blue_plus`.
+   - Requests 512-byte ATT MTU on connection to support single-PDU JSON packet transmission.
+   - Discovers `OfflinkBleService.serviceUuid`.
+   - Subscribes to `txCharacteristicUuid` notifications for incoming packets from the peripheral.
+   - Writes outgoing packets to `rxCharacteristicUuid` (with write response).
+2. **Peripheral Role (`BlePeripheralPacketChannel`)**:
+   - Advertises `OfflinkBleService.serviceUuid` via `flutter_ble_peripheral`.
+   - Hosts GATT service with `txCharacteristicUuid` (notify) and `rxCharacteristicUuid` (write).
+   - Receives incoming packets written to RX characteristic via `onDataReceived`.
+   - Sends outgoing packets to the connected central by notifying on `txCharacteristicUuid`.
+3. **Unified Stream**:
+   - Incoming packets across both Central and Peripheral channels are decoded via `PacketCodec` and multiplexed into a single `incomingPackets` stream on `PacketTransport`.
+   - Malformed or invalid packets are caught and safely ignored without disrupting the stream or connection.
 
 ## Discovery
 
@@ -30,33 +44,30 @@ Idle
   -> Discovery window
   -> Peer found
   -> Connect
+  -> MTU negotiation (request 512 bytes)
   -> Service discovery
-  -> Protocol handshake
-  -> Secure session
-  -> Batch synchronization
-  -> ACK
+  -> Subscribe to TX notifications
+  -> Bidirectional packet exchange
   -> Disconnect
   -> Backoff/idle
 ```
 
 ## GATT design
 
-Initial logical service:
+Logical service:
 
 ```text
-Offlink Service
+Offlink Service (00000000-0000-0000-0000-000000000000)
   |
-  +-- Control characteristic
+  +-- Control characteristic (00000000-0000-0000-0000-000000000001)
   |     handshake / capabilities / control
   |
-  +-- TX characteristic
-  |     node -> peer packets
+  +-- TX characteristic (00000000-0000-0000-0000-000000000002)
+  |     peripheral -> central notifications
   |
-  +-- RX characteristic
-        peer -> node packets
+  +-- RX characteristic (00000000-0000-0000-0000-000000000003)
+        central -> peripheral writes
 ```
-
-The exact UUIDs, properties, MTU strategy, packet framing and fragmentation rules must be frozen in the protocol review before implementation.
 
 ## Battery rules
 
@@ -75,10 +86,5 @@ Android and iOS manage background execution differently. We must test actual beh
 ## Physical testing
 
 At minimum:
-- Android A
-- Android B
-- Android C
-
-Later:
-- Android + ESP32
-- iOS + Android
+- Android A ↔ Android B (bidirectional verification)
+- Android A ↔ Android B ↔ Android C (mesh forwarding in Module 7)

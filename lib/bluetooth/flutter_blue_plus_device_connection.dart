@@ -1,10 +1,17 @@
+// ignore_for_file: prefer_initializing_formals
+
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'ble_device_connection.dart';
 import 'ble_models.dart';
+import 'ble_packet_channel.dart';
 
 class FlutterBluePlusDeviceConnection implements BleDeviceConnection {
-  const FlutterBluePlusDeviceConnection();
+  const FlutterBluePlusDeviceConnection({
+    BlePacketChannel Function(BluetoothDevice device)? channelFactory,
+  }) : _channelFactory = channelFactory;
+
+  final BlePacketChannel Function(BluetoothDevice device)? _channelFactory;
 
   @override
   Future<void> connect(BlePeer peer) async {
@@ -18,5 +25,12 @@ class FlutterBluePlusDeviceConnection implements BleDeviceConnection {
     final device = BluetoothDevice.fromId(peer.peerId);
 
     await device.disconnect();
+  }
+
+  Future<BlePacketChannel> createPacketChannel(String peerId) async {
+    final device = BluetoothDevice.fromId(peerId);
+    final factory = _channelFactory;
+
+    return factory != null ? factory(device) : BlePacketChannel(device);
   }
 }
