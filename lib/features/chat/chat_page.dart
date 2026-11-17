@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../bluetooth/ble_models.dart';
 import '../../domain/messaging/chat_message.dart';
+import '../../domain/messaging/direct_message_service.dart';
 import '../../domain/messaging/message_repository.dart';
 import '../../domain/messaging/message_service.dart';
 
@@ -44,6 +45,16 @@ class _ChatPageState extends State<ChatPage> {
     if (widget.messageRepository != null) {
       _loadPersistedHistory();
     }
+
+    if (widget.messageService is DirectMessageService && widget.isConnected) {
+      final directService = widget.messageService as DirectMessageService;
+      if (!directService.hasSecureSession(widget.peer.peerId)) {
+        directService.initiateSecureSession(
+          peerId: widget.peer.peerId,
+          recipientNodeId: widget.peer.peerId,
+        );
+      }
+    }
   }
 
   Future<void> _loadPersistedHistory() async {
@@ -66,14 +77,8 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _handleIncomingMessage(ChatMessage message) {
-    if (!mounted) {
-      return;
-    }
-
-    // Accept message if it comes from this peer or is directed to this conversation
-    if ((message.senderNodeId == widget.peer.peerId ||
-            message.conversationId == widget.peer.peerId) &&
-        !_messages.any((m) => m.id == message.id)) {
+    if (message.senderNodeId == widget.peer.peerId ||
+        message.recipientNodeId == widget.peer.peerId) {
       setState(() {
         if (!_messages.any((m) => m.id == message.id)) {
           _messages.add(message);
@@ -85,7 +90,7 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _sendMessage() async {
     if (_isSending) {
-      return; // Prevent duplicate sends caused by repeated taps.
+      return;
     }
 
     final text = _textController.text.trim();
@@ -159,6 +164,11 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isEncrypted =
+        widget.messageService is DirectMessageService &&
+        (widget.messageService as DirectMessageService).hasSecureSession(
+          widget.peer.peerId,
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -186,6 +196,18 @@ class _ChatPageState extends State<ChatPage> {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+                if (isEncrypted) ...[
+                  const SizedBox(width: 8),
+                  const Icon(Icons.lock, size: 12, color: Colors.green),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Encrypted',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ],
             ),
           ],

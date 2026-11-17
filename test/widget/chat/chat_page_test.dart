@@ -3,10 +3,22 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:offlink/bluetooth/ble_models.dart';
+import 'package:offlink/core/identity/node_id_generator.dart';
+import 'package:offlink/crypto/identity/identity_key_service.dart';
+import 'package:offlink/crypto/session/secure_session_service.dart';
+import 'package:offlink/domain/identity/identity_initialization_service.dart';
+import 'package:offlink/domain/identity/identity_manager.dart';
+import 'package:offlink/domain/identity/identity_repository.dart';
+import 'package:offlink/domain/identity/offlink_identity.dart';
 import 'package:offlink/domain/messaging/chat_message.dart';
+import 'package:offlink/domain/messaging/direct_message_service.dart';
 import 'package:offlink/domain/messaging/message_repository.dart';
 import 'package:offlink/domain/messaging/message_service.dart';
+import 'package:offlink/domain/protocol/offlink_packet.dart';
+import 'package:offlink/domain/protocol/packet_transport.dart';
 import 'package:offlink/features/chat/chat_page.dart';
+
+import '../../unit/identity/fakes/fake_secure_key_storage.dart';
 
 class MockMessageService implements MessageService {
   final StreamController<ChatMessage> _incomingController =
@@ -98,6 +110,36 @@ class MockMessageRepository implements MessageRepository {
   Future<void> deleteMessagesForConversation(String conversationId) async {
     messages.clear();
   }
+}
+
+class _TestPacketTransport implements PacketTransport {
+  final StreamController<OfflinkPacket> _incoming =
+      StreamController<OfflinkPacket>.broadcast();
+
+  @override
+  Stream<OfflinkPacket> get incomingPackets => _incoming.stream;
+
+  @override
+  Future<void> sendPacket({
+    required String peerId,
+    required OfflinkPacket packet,
+  }) async {}
+}
+
+class _TestIdentityRepo implements IdentityRepository {
+  _TestIdentityRepo(this.identity);
+  final OfflinkIdentity identity;
+
+  @override
+  Future<OfflinkIdentity?> loadIdentity() async => identity;
+  @override
+  Future<bool> hasIdentity() async => true;
+  @override
+  Future<void> saveIdentity(OfflinkIdentity identity) async {}
+  @override
+  Future<void> updateUsername(String username) async {}
+  @override
+  Future<void> clearIdentity() async {}
 }
 
 void main() {
@@ -301,5 +343,80 @@ void main() {
       expect(find.text('Persisted incoming message'), findsOneWidget);
       expect(find.text('Persisted outgoing reply'), findsOneWidget);
     });
+
+    testWidgets(
+      'displays Encrypted badge when DirectMessageService has active session',
+      (tester) async {
+        final keyService = IdentityKeyService(
+          secureStorage: FakeSecureKeyStorage(),
+        );
+        final keyPair = await keyService.generateKeyPair();
+        await keyService.storePrivateKey(keyPair.privateKey);
+
+        final aliceIdentity = OfflinkIdentity(
+          nodeId: 'node-alice',
+          username: 'Alice',
+          publicKey: '00' * 32,
+          createdAt: DateTime.now().toUtc(),
+        );
+
+        final idManager = IdentityManager(
+          repository: _TestIdentityRepo(aliceIdentity),
+          initializationService: IdentityInitializationService(
+            nodeIdGenerator: NodeIdGenerator(),
+            keyService: keyService,
+          ),
+          keyService: keyService,
+        );
+        await idManager.loadExistingIdentity();
+
+        final sessionService = SecureSessionService(
+          identityKeyService: keyService,
+          getLocalNodeId: () => 'node-alice',
+        );
+
+        final bobKeyService = IdentityKeyService(
+          secureStorage: FakeSecureKeyStorage(),
+        );
+        final bobKeyPair = await bobKeyService.generateKeyPair();
+        await bobKeyService.storePrivateKey(bobKeyPair.privateKey);
+        final bobSessionService = SecureSessionService(
+          identityKeyService: bobKeyService,
+          getLocalNodeId: () => testPeer.peerId,
+        );
+
+        final initPayload = await sessionService.createHandshakeInit(
+          testPeer.peerId,
+        );
+        final responsePayload = await bobSessionService.handleHandshakeInit(
+          initPayload,
+        );
+        await sessionService.handleHandshakeResponse(responsePayload);
+
+        final directService = DirectMessageService(
+          packetTransport: _TestPacketTransport(),
+          identityManager: idManager,
+          secureSessionService: sessionService,
+        );
+
+        expect(directService.hasSecureSession(testPeer.peerId), isTrue);
+
+        await tester.pumpWidget(
+          createTestApp(
+            ChatPage(
+              peer: testPeer,
+              messageService: directService,
+              isConnected: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Encrypted'), findsOneWidget);
+        expect(find.byIcon(Icons.lock), findsOneWidget);
+
+        directService.dispose();
+      },
+    );
   });
 }

@@ -2,6 +2,9 @@
 
 import 'dart:async';
 
+import '../../crypto/session/encrypted_payload.dart';
+import '../../crypto/session/handshake_payload.dart';
+import '../../crypto/session/secure_session_service.dart';
 import '../identity/identity_manager.dart';
 import '../protocol/offlink_message_type.dart';
 import '../protocol/offlink_packet.dart';
@@ -18,10 +21,12 @@ class DirectMessageService implements MessageService {
     required IdentityManager identityManager,
     MessageRepository? messageRepository,
     ConversationRepository? conversationRepository,
+    SecureSessionService? secureSessionService,
   }) : _packetTransport = packetTransport,
        _identityManager = identityManager,
        _messageRepository = messageRepository,
-       _conversationRepository = conversationRepository {
+       _conversationRepository = conversationRepository,
+       _secureSessionService = secureSessionService {
     _subscription = _packetTransport.incomingPackets.listen(
       _handleIncomingPacket,
     );
@@ -31,6 +36,7 @@ class DirectMessageService implements MessageService {
   final IdentityManager _identityManager;
   final MessageRepository? _messageRepository;
   final ConversationRepository? _conversationRepository;
+  final SecureSessionService? _secureSessionService;
 
   final StreamController<ChatMessage> _incomingMessagesController =
       StreamController<ChatMessage>.broadcast();
@@ -41,8 +47,105 @@ class DirectMessageService implements MessageService {
   Stream<ChatMessage> get incomingMessages =>
       _incomingMessagesController.stream;
 
+  bool hasSecureSession(String peerNodeId) {
+    return _secureSessionService?.hasSession(peerNodeId) ?? false;
+  }
+
+  Future<void> initiateSecureSession({
+    required String peerId,
+    required String recipientNodeId,
+  }) async {
+    if (_secureSessionService == null) {
+      return;
+    }
+
+    final localNodeId =
+        _identityManager.currentIdentity?.nodeId ?? 'local-node';
+    final handshakeInit = await _secureSessionService.createHandshakeInit(
+      recipientNodeId,
+    );
+
+    final packet = OfflinkPacket(
+      messageId: 'handshake-init-${DateTime.now().microsecondsSinceEpoch}',
+      senderNodeId: localNodeId,
+      recipientNodeId: recipientNodeId,
+      messageType: OfflinkMessageType.handshakeInit,
+      timestamp: DateTime.now().toUtc(),
+      ttl: 3,
+      payload: handshakeInit.encode(),
+    );
+
+    await _packetTransport.sendPacket(peerId: peerId, packet: packet);
+  }
+
   Future<void> _handleIncomingPacket(OfflinkPacket packet) async {
-    if (packet.messageType != OfflinkMessageType.text) {
+    if (packet.messageType == OfflinkMessageType.handshakeInit) {
+      if (_secureSessionService == null) {
+        return;
+      }
+      try {
+        final initPayload = HandshakeInitPayload.decode(packet.payload);
+        final responsePayload = await _secureSessionService.handleHandshakeInit(
+          initPayload,
+        );
+
+        final localNodeId =
+            _identityManager.currentIdentity?.nodeId ?? 'local-node';
+        final responsePacket = OfflinkPacket(
+          messageId: 'handshake-resp-${DateTime.now().microsecondsSinceEpoch}',
+          senderNodeId: localNodeId,
+          recipientNodeId: packet.senderNodeId,
+          messageType: OfflinkMessageType.handshakeResponse,
+          timestamp: DateTime.now().toUtc(),
+          ttl: 3,
+          payload: responsePayload.encode(),
+        );
+
+        await _packetTransport.sendPacket(
+          peerId: packet.senderNodeId,
+          packet: responsePacket,
+        );
+      } catch (_) {
+        return;
+      }
+      return;
+    }
+
+    if (packet.messageType == OfflinkMessageType.handshakeResponse) {
+      if (_secureSessionService == null) {
+        return;
+      }
+      try {
+        final responsePayload = HandshakeResponsePayload.decode(packet.payload);
+        await _secureSessionService.handleHandshakeResponse(responsePayload);
+      } catch (_) {
+        return;
+      }
+      return;
+    }
+
+    String messageContent;
+
+    if (packet.messageType == OfflinkMessageType.encrypted) {
+      if (_secureSessionService == null) {
+        return;
+      }
+      try {
+        final encryptedPayload = EncryptedPayload.decode(packet.payload);
+        messageContent = await _secureSessionService.decrypt(
+          peerNodeId: packet.senderNodeId,
+          encryptedPayload: encryptedPayload,
+          messageId: packet.messageId,
+          senderNodeId: packet.senderNodeId,
+          recipientNodeId: packet.recipientNodeId,
+        );
+      } catch (_) {
+        // Discard packet on authentication failure or replay attack without leaking plaintext
+        return;
+      }
+    } else if (packet.messageType == OfflinkMessageType.text) {
+      messageContent = packet.payload;
+    } else {
       return;
     }
 
@@ -51,7 +154,7 @@ class DirectMessageService implements MessageService {
       conversationId: packet.senderNodeId,
       senderNodeId: packet.senderNodeId,
       recipientNodeId: packet.recipientNodeId,
-      content: packet.payload,
+      content: messageContent,
       timestamp: packet.timestamp,
       isOutgoing: false,
       status: ChatMessageStatus.delivered,
@@ -67,7 +170,7 @@ class DirectMessageService implements MessageService {
         peerDisplayName:
             existing?.peerDisplayName ??
             'Peer ${packet.senderNodeId.length > 8 ? packet.senderNodeId.substring(0, 8) : packet.senderNodeId}',
-        lastMessage: packet.payload,
+        lastMessage: messageContent,
         unreadCount: (existing?.unreadCount ?? 0) + 1,
         updatedAt: packet.timestamp,
       );
@@ -100,15 +203,37 @@ class DirectMessageService implements MessageService {
     final messageId = 'msg-${DateTime.now().microsecondsSinceEpoch}';
     final now = DateTime.now().toUtc();
 
-    final packet = OfflinkPacket(
-      messageId: messageId,
-      senderNodeId: localNodeId,
-      recipientNodeId: recipientNodeId,
-      messageType: OfflinkMessageType.text,
-      timestamp: now,
-      ttl: 3,
-      payload: trimmedContent,
-    );
+    OfflinkPacket packet;
+    if (_secureSessionService != null &&
+        _secureSessionService.hasSession(recipientNodeId)) {
+      final encryptedPayload = await _secureSessionService.encrypt(
+        peerNodeId: recipientNodeId,
+        plaintext: trimmedContent,
+        messageId: messageId,
+        senderNodeId: localNodeId,
+        recipientNodeId: recipientNodeId,
+      );
+
+      packet = OfflinkPacket(
+        messageId: messageId,
+        senderNodeId: localNodeId,
+        recipientNodeId: recipientNodeId,
+        messageType: OfflinkMessageType.encrypted,
+        timestamp: now,
+        ttl: 3,
+        payload: encryptedPayload.encode(),
+      );
+    } else {
+      packet = OfflinkPacket(
+        messageId: messageId,
+        senderNodeId: localNodeId,
+        recipientNodeId: recipientNodeId,
+        messageType: OfflinkMessageType.text,
+        timestamp: now,
+        ttl: 3,
+        payload: trimmedContent,
+      );
+    }
 
     final message = ChatMessage(
       id: messageId,

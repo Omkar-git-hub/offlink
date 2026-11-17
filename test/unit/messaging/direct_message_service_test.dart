@@ -220,7 +220,7 @@ void main() {
           senderNodeId: 'node-bob-5678',
           recipientNodeId: 'node-alice-1234',
           messageType: OfflinkMessageType.text,
-          timestamp: DateTime.utc(2026, 10, 27, 10, 30),
+          timestamp: DateTime.now().toUtc().add(const Duration(seconds: 1)),
           ttl: 3,
           payload: 'Persisted reply',
         );

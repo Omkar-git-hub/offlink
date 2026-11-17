@@ -6,6 +6,7 @@ import 'bluetooth/flutter_blue_plus_device_connection.dart';
 import 'bluetooth/phone_ble_connection.dart';
 import 'core/identity/node_id_generator.dart';
 import 'crypto/identity/identity_key_service.dart';
+import 'crypto/session/secure_session_service.dart';
 import 'data/database/drift_conversation_repository.dart';
 import 'data/database/drift_message_repository.dart';
 import 'data/database/offlink_database.dart';
@@ -58,11 +59,18 @@ Future<void> main() async {
   final messageRepository = DriftMessageRepository(database);
   final conversationRepository = DriftConversationRepository(database);
 
+  final secureSessionService = SecureSessionService(
+    identityKeyService: identityKeyService,
+    getLocalNodeId: () =>
+        identityManager.currentIdentity?.nodeId ?? 'local-node',
+  );
+
   final messageService = DirectMessageService(
     packetTransport: packetTransport,
     identityManager: identityManager,
     messageRepository: messageRepository,
     conversationRepository: conversationRepository,
+    secureSessionService: secureSessionService,
   );
 
   runApp(
