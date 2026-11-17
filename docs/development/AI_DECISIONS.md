@@ -49,3 +49,17 @@ This document records durable architectural, protocol, security, and compatibili
   - All DateTime columns are normalized to UTC upon retrieval (`.toUtc()`) to ensure consistent ordering and timestamp comparison across diverse device locales.
   - Inject repositories into `DirectMessageService` and `ChatPage` to automatically persist messages on send and receive, and preload conversation history on chat launch without coupling UI components to Drift.
 - **Status**: Implemented in Module 3 (`feature/local-message-storage`).
+
+
+---
+
+## DECISION-006: Authenticated X25519/Ed25519 Handshake & AES-256-GCM AEAD Session Encryption
+- **Context**: Offlink operates over open Bluetooth Low Energy (BLE) channels. Packets can be intercepted, tampered with, or replayed by untrusted peer or relay nodes. The application requires mutual peer identity authentication, forward secrecy, ciphertext-only transmission over the wire, replay protection, and envelope-bound authenticity.
+- **Decision**:
+  - Mutual Authentication: Peers sign ephemeral X25519 public keys with their long-term Ed25519 identity key (`HandshakeInitPayload` and `HandshakeResponsePayload`). Signatures are strictly 64 bytes and validated prior to session key derivation.
+  - Forward Secrecy & Key Derivation: Ephemeral X25519 Diffie-Hellman key agreement derives a shared secret. HKDF-SHA256 with domain-separated salt and info parameters derives a 256-bit symmetric session key (`AesGcm.with256bits()`).
+  - AEAD Envelope Binding: Messages are encrypted with AES-256-GCM using Additional Authenticated Data (AAD) bound to packet envelope headers: `AAD = "$messageId:$senderNodeId:$recipientNodeId:$sequenceNumber"`. This prevents header tampering, recipient swapping, and message splicing attacks.
+  - Replay Protection: A monotonic sequence counter is tracked per session. Inbound packets with `sequenceNumber <= lastInboundSequenceNumber` are rejected immediately. The counter only advances after successful AEAD cryptographic MAC verification.
+  - Plaintext Leak Prevention: Any authentication or decryption failure silently rejects the packet without logging, persisting, or displaying corrupted plaintext to the user.
+  - UI Security Indicator: `ChatPage` displays an "Encrypted" lock badge when a secure session is active with the peer.
+- **Status**: Implemented in Module 4 (`feature/secure-messaging`).
