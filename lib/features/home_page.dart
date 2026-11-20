@@ -8,6 +8,7 @@ import '../bluetooth/ble_packet_transport.dart';
 import '../bluetooth/phone_ble_connection.dart';
 import '../bluetooth/phone_ble_discovery.dart';
 import '../domain/identity/identity_manager.dart';
+import '../domain/mesh/mesh_packet_router.dart';
 import '../domain/messaging/message_repository.dart';
 import '../domain/messaging/message_service.dart';
 import '../domain/protocol/offlink_message_type.dart';
@@ -19,6 +20,7 @@ class HomePage extends StatefulWidget {
     super.key,
     required this.bleConnection,
     required this.packetTransport,
+    this.meshRouter,
     this.identityManager,
     this.messageService,
     this.messageRepository,
@@ -26,6 +28,7 @@ class HomePage extends StatefulWidget {
 
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
+  final MeshPacketRouter? meshRouter;
   final IdentityManager? identityManager;
   final MessageService? messageService;
   final MessageRepository? messageRepository;
@@ -72,9 +75,11 @@ class _HomePageState extends State<HomePage> {
       setState(() {});
     });
 
-    _incomingPacketSubscription = widget.packetTransport.incomingPackets.listen((
-      packet,
-    ) {
+    final packetStream = widget.meshRouter != null
+        ? widget.meshRouter!.incomingPackets
+        : widget.packetTransport.incomingPackets;
+
+    _incomingPacketSubscription = packetStream.listen((packet) {
       debugPrint(
         '[Offlink Packet] Received: ${packet.messageId} from ${packet.senderNodeId}',
       );
@@ -203,6 +208,7 @@ class _HomePageState extends State<HomePage> {
       debugPrint('[Offlink Packet] Initializing channel for: ${peer.peerId}');
 
       await widget.packetTransport.initializePeer(peer.peerId);
+      widget.meshRouter?.addDirectNeighbor(peer.peerId);
 
       if (!mounted || _isDisposed) {
         return;
@@ -244,6 +250,7 @@ class _HomePageState extends State<HomePage> {
     try {
       debugPrint('[Offlink BLE] Disconnecting from peer: ${peer.peerId}');
 
+      widget.meshRouter?.removePeer(peer.peerId);
       await widget.packetTransport.removePeer(peer.peerId);
 
       await widget.bleConnection.disconnect(peer.peerId);
@@ -302,10 +309,8 @@ class _HomePageState extends State<HomePage> {
     );
 
     try {
-      await widget.packetTransport.sendPacket(
-        peerId: peer.peerId,
-        packet: packet,
-      );
+      final transport = widget.meshRouter ?? widget.packetTransport;
+      await transport.sendPacket(peerId: peer.peerId, packet: packet);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -345,7 +350,8 @@ class _HomePageState extends State<HomePage> {
     );
 
     try {
-      await widget.packetTransport.sendPacket(
+      final transport = widget.meshRouter ?? widget.packetTransport;
+      await transport.sendPacket(
         peerId: lastPacket.senderNodeId,
         packet: replyPacket,
       );

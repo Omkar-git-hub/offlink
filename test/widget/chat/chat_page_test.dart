@@ -120,6 +120,9 @@ class _TestPacketTransport implements PacketTransport {
   Stream<OfflinkPacket> get incomingPackets => _incoming.stream;
 
   @override
+  List<String> get connectedPeerIds => const [];
+
+  @override
   Future<void> sendPacket({
     required String peerId,
     required OfflinkPacket packet,

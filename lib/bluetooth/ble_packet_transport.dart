@@ -105,6 +105,9 @@ class BlePacketTransport implements PacketTransport {
 
   bool hasChannel(String peerId) => _channels.containsKey(peerId);
 
+  @override
+  List<String> get connectedPeerIds => _channels.keys.toList();
+
   Future<void> dispose() async {
     for (final channel in _channels.values) {
       await channel.dispose();

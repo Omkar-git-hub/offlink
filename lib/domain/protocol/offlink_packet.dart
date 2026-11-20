@@ -24,6 +24,28 @@ class OfflinkPacket {
   final int ttl;
   final String payload;
 
+  OfflinkPacket copyWith({
+    int? version,
+    String? messageId,
+    String? senderNodeId,
+    String? recipientNodeId,
+    OfflinkMessageType? messageType,
+    DateTime? timestamp,
+    int? ttl,
+    String? payload,
+  }) {
+    return OfflinkPacket(
+      version: version ?? this.version,
+      messageId: messageId ?? this.messageId,
+      senderNodeId: senderNodeId ?? this.senderNodeId,
+      recipientNodeId: recipientNodeId ?? this.recipientNodeId,
+      messageType: messageType ?? this.messageType,
+      timestamp: timestamp ?? this.timestamp,
+      ttl: ttl ?? this.ttl,
+      payload: payload ?? this.payload,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'version': version,
