@@ -27,6 +27,9 @@ class FakePacketTransport implements PacketTransport {
   Stream<OfflinkPacket> get incomingPackets => _incomingController.stream;
 
   @override
+  List<String> get connectedPeerIds => const [];
+
+  @override
   Future<void> sendPacket({
     required String peerId,
     required OfflinkPacket packet,

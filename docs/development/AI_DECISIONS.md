@@ -63,3 +63,16 @@ This document records durable architectural, protocol, security, and compatibili
   - Plaintext Leak Prevention: Any authentication or decryption failure silently rejects the packet without logging, persisting, or displaying corrupted plaintext to the user.
   - UI Security Indicator: `ChatPage` displays an "Encrypted" lock badge when a secure session is active with the peer.
 - **Status**: Implemented in Module 4 (`feature/secure-messaging`).
+
+---
+
+## DECISION-007: Multi-Peer Mesh Routing, Split-Horizon Flooding, and End-to-End Privacy Preservation across Relay Hops
+- **Context**: Offlink devices must communicate beyond direct single-hop BLE range via multi-peer mesh routing. Intermediate relay nodes must forward messages without having access to message plaintext. Routing loops, broadcast storms, and stale paths must be prevented. In addition, delivery confirmations (ACKs) must route back to the origin across intermediate relays to confirm successful delivery.
+- **Decision**:
+  - Transport Layer Abstraction: `MeshPacketRouter` implements `PacketTransport`, wrapping physical `BlePacketTransport` and feeding directly into `DirectMessageService`. This preserves the Open/Closed Principle: neither UI nor cryptographic services require changes to support multi-hop routing.
+  - End-to-End Privacy across Relay Hops: Intermediate relay nodes inspect only `OfflinkPacket` envelope headers (`messageId`, `senderNodeId`, `recipientNodeId`, `ttl`). The encrypted `payload` is forwarded intact without decryption. Intermediate relay nodes cannot decrypt payloads as they lack the X25519/AES-GCM session keys established between the communicating endpoints.
+  - Loop Prevention & Deduplication: `SeenMessageCache` tracks observed message IDs with bounded capacity (default 1,000) and entry TTL (default 10 minutes). Duplicate packets are discarded and emitted to `droppedPackets`. Outbound packets from the local node are marked in the cache to prevent loopback processing.
+  - Hop Limit & Expiration: When acting as a relay, packets are forwarded with decremented TTL (`ttl: packet.ttl - 1`). Packets with `ttl <= 1` are dropped as expired.
+  - Dynamic Routing Table & Split-Horizon Flooding: `RoutingTable` learns reverse routes from incoming packet sender IDs and hop counts, selecting shorter paths and pruning entries after 15 minutes. When forwarding or flooding, split-horizon suppression prevents sending packets back out on the link or peer from which they arrived.
+  - Multi-Hop Delivery Acknowledgement: Upon receiving and storing a message, the destination node automatically emits an `OfflinkMessageType.acknowledgement` packet carrying the original `messageId` back to the sender node across the mesh. Upon receiving the ACK packet, `DirectMessageService` updates the message status in `MessageRepository` to `ChatMessageStatus.delivered`.
+- **Status**: Implemented in Module 5 (`feature/mesh-routing`).

@@ -124,6 +124,17 @@ class DirectMessageService implements MessageService {
       return;
     }
 
+    if (packet.messageType == OfflinkMessageType.acknowledgement) {
+      final ackMessageId = packet.payload;
+      if (_messageRepository != null) {
+        await _messageRepository.updateMessageStatus(
+          ackMessageId,
+          ChatMessageStatus.delivered,
+        );
+      }
+      return;
+    }
+
     String messageContent;
 
     if (packet.messageType == OfflinkMessageType.encrypted) {
@@ -185,6 +196,27 @@ class DirectMessageService implements MessageService {
     }
 
     _incomingMessagesController.add(message);
+
+    final localNodeId =
+        _identityManager.currentIdentity?.nodeId ?? 'local-node';
+    final ackPacket = OfflinkPacket(
+      messageId: 'ack-${DateTime.now().microsecondsSinceEpoch}',
+      senderNodeId: localNodeId,
+      recipientNodeId: packet.senderNodeId,
+      messageType: OfflinkMessageType.acknowledgement,
+      timestamp: DateTime.now().toUtc(),
+      ttl: 4,
+      payload: packet.messageId,
+    );
+
+    try {
+      await _packetTransport.sendPacket(
+        peerId: packet.senderNodeId,
+        packet: ackPacket,
+      );
+    } catch (_) {
+      // Best-effort mesh delivery confirmation
+    }
   }
 
   @override

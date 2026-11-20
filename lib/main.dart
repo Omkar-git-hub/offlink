@@ -14,6 +14,7 @@ import 'data/identity/flutter_secure_identity_storage.dart';
 import 'data/identity/secure_identity_repository.dart';
 import 'domain/identity/identity_initialization_service.dart';
 import 'domain/identity/identity_manager.dart';
+import 'domain/mesh/mesh_packet_router.dart';
 import 'domain/messaging/direct_message_service.dart';
 import 'domain/messaging/message_repository.dart';
 import 'domain/messaging/message_service.dart';
@@ -55,6 +56,12 @@ Future<void> main() async {
     peripheralChannel: peripheralChannel,
   );
 
+  final meshPacketRouter = MeshPacketRouter(
+    transport: packetTransport,
+    getLocalNodeId: () =>
+        identityManager.currentIdentity?.nodeId ?? 'local-node',
+  );
+
   final database = OfflinkDatabase();
   final messageRepository = DriftMessageRepository(database);
   final conversationRepository = DriftConversationRepository(database);
@@ -66,7 +73,7 @@ Future<void> main() async {
   );
 
   final messageService = DirectMessageService(
-    packetTransport: packetTransport,
+    packetTransport: meshPacketRouter,
     identityManager: identityManager,
     messageRepository: messageRepository,
     conversationRepository: conversationRepository,
@@ -79,6 +86,7 @@ Future<void> main() async {
       hasIdentity: identity != null,
       bleConnection: bleConnection,
       packetTransport: packetTransport,
+      meshRouter: meshPacketRouter,
       messageService: messageService,
       messageRepository: messageRepository,
       database: database,
@@ -93,6 +101,7 @@ class OfflinkApp extends StatefulWidget {
     required this.hasIdentity,
     required this.bleConnection,
     required this.packetTransport,
+    this.meshRouter,
     required this.messageService,
     this.messageRepository,
     this.database,
@@ -102,6 +111,7 @@ class OfflinkApp extends StatefulWidget {
   final bool hasIdentity;
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
+  final MeshPacketRouter? meshRouter;
   final MessageService messageService;
   final MessageRepository? messageRepository;
   final OfflinkDatabase? database;
@@ -134,6 +144,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
   @override
   void dispose() {
     widget.messageService.dispose();
+    widget.meshRouter?.dispose();
     widget.packetTransport.dispose();
     widget.bleConnection.dispose();
     widget.database?.close();
@@ -153,6 +164,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
           ? HomePage(
               bleConnection: widget.bleConnection,
               packetTransport: widget.packetTransport,
+              meshRouter: widget.meshRouter,
               identityManager: widget.identityManager,
               messageService: widget.messageService,
               messageRepository: widget.messageRepository,

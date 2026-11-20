@@ -26,6 +26,9 @@ class BlePeripheralPacketTransport implements PacketTransport {
   @override
   Stream<OfflinkPacket> get incomingPackets => _incomingPackets.stream;
 
+  @override
+  List<String> get connectedPeerIds => const [];
+
   void initialize() {
     if (_initialized) {
       return;
