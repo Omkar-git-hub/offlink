@@ -66,8 +66,35 @@ void main() {
       },
     );
 
-    test('schema version is 1', () {
-      expect(db.schemaVersion, 1);
+    test('schema version is 2', () {
+      expect(db.schemaVersion, 2);
+    });
+
+    test('supports insertion and retrieval in queuedPacketsTable', () async {
+      final now = DateTime.utc(2026, 11, 21, 0, 0);
+
+      await db
+          .into(db.queuedPacketsTable)
+          .insert(
+            QueuedPacketsTableCompanion.insert(
+              id: 'packet-1',
+              senderNodeId: 'node-alice',
+              recipientNodeId: 'node-charlie',
+              messageType: 'encrypted',
+              payload: 'opaque-ciphertext',
+              timestamp: now,
+              ttl: 3,
+              createdAt: now,
+              nextAttemptAt: now,
+            ),
+          );
+
+      final packets = await db.select(db.queuedPacketsTable).get();
+      expect(packets, hasLength(1));
+      expect(packets.first.id, equals('packet-1'));
+      expect(packets.first.recipientNodeId, equals('node-charlie'));
+      expect(packets.first.status, equals('pending'));
+      expect(packets.first.retryCount, equals(0));
     });
   });
 }

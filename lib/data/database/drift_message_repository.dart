@@ -82,6 +82,32 @@ class DriftMessageRepository implements MessageRepository {
     return rows.map(_mapRowToEntity).toList();
   }
 
+  @override
+  Future<ChatMessage?> getMessageById(String messageId) async {
+    final query = _db.select(_db.messagesTable)
+      ..where((t) => t.id.equals(messageId));
+    final row = await query.getSingleOrNull();
+    if (row == null) return null;
+    return _mapRowToEntity(row);
+  }
+
+  @override
+  Future<int> pruneExpiredMessages({
+    Duration maxAge = const Duration(hours: 24),
+  }) async {
+    final cutoff = DateTime.now().toUtc().subtract(maxAge);
+    final query = _db.update(_db.messagesTable)
+      ..where(
+        (t) =>
+            t.isOutgoing.equals(true) &
+            t.status.equals('sent') &
+            t.timestamp.isSmallerThanValue(cutoff),
+      );
+    return await query.write(
+      MessagesTableCompanion(status: Value(ChatMessageStatus.failed.name)),
+    );
+  }
+
   ChatMessage _mapRowToEntity(MessagesTableData row) {
     return ChatMessage(
       id: row.id,

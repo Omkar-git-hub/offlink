@@ -113,6 +113,17 @@ class MockMessageRepository implements MessageRepository {
 
   @override
   Future<List<ChatMessage>> getPendingMessages({int limit = 50}) async => [];
+
+  @override
+  Future<ChatMessage?> getMessageById(String messageId) async {
+    final matches = messages.where((m) => m.id == messageId);
+    return matches.isEmpty ? null : matches.first;
+  }
+
+  @override
+  Future<int> pruneExpiredMessages({
+    Duration maxAge = const Duration(hours: 24),
+  }) async => 0;
 }
 
 class _TestPacketTransport implements PacketTransport {
