@@ -23,4 +23,8 @@ abstract class MessageRepository {
 
   /// Deletes all messages in a conversation.
   Future<void> deleteMessagesForConversation(String conversationId);
+
+  /// Retrieves pending outgoing messages awaiting delivery confirmation.
+  Future<List<ChatMessage>> getPendingMessages({int limit = 50}) =>
+      Future.value(const []);
 }

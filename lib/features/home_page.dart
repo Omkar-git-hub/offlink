@@ -8,6 +8,8 @@ import '../bluetooth/ble_packet_transport.dart';
 import '../bluetooth/phone_ble_connection.dart';
 import '../bluetooth/phone_ble_discovery.dart';
 import '../domain/identity/identity_manager.dart';
+import '../domain/lifecycle/app_lifecycle_coordinator.dart';
+import '../domain/lifecycle/connection_recovery_coordinator.dart';
 import '../domain/mesh/mesh_packet_router.dart';
 import '../domain/messaging/message_repository.dart';
 import '../domain/messaging/message_service.dart';
@@ -21,6 +23,8 @@ class HomePage extends StatefulWidget {
     required this.bleConnection,
     required this.packetTransport,
     this.meshRouter,
+    this.lifecycleCoordinator,
+    this.connectionRecovery,
     this.identityManager,
     this.messageService,
     this.messageRepository,
@@ -29,6 +33,8 @@ class HomePage extends StatefulWidget {
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
   final MeshPacketRouter? meshRouter;
+  final AppLifecycleCoordinator? lifecycleCoordinator;
+  final ConnectionRecoveryCoordinator? connectionRecovery;
   final IdentityManager? identityManager;
   final MessageService? messageService;
   final MessageRepository? messageRepository;
@@ -60,6 +66,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+
+    widget.lifecycleCoordinator?.initialize();
 
     _discovery = PhoneBleDiscovery();
 
@@ -204,6 +212,8 @@ class _HomePageState extends State<HomePage> {
       debugPrint('[Offlink BLE] Connecting to peer: ${peer.peerId}');
 
       await widget.bleConnection.connect(peer);
+      widget.connectionRecovery?.onPeerConnected(peer.peerId);
+      widget.connectionRecovery?.trackPeer(peer);
 
       debugPrint('[Offlink Packet] Initializing channel for: ${peer.peerId}');
 
@@ -250,6 +260,7 @@ class _HomePageState extends State<HomePage> {
     try {
       debugPrint('[Offlink BLE] Disconnecting from peer: ${peer.peerId}');
 
+      widget.connectionRecovery?.untrackPeer(peer.peerId);
       widget.meshRouter?.removePeer(peer.peerId);
       await widget.packetTransport.removePeer(peer.peerId);
 
