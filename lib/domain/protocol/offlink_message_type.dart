@@ -4,6 +4,8 @@ enum OfflinkMessageType {
   encrypted,
   handshakeInit,
   handshakeResponse,
+  groupMessage,
+  groupMembership,
 }
 
 extension OfflinkMessageTypeCodec on OfflinkMessageType {
@@ -19,6 +21,10 @@ extension OfflinkMessageTypeCodec on OfflinkMessageType {
         return 'handshake_init';
       case OfflinkMessageType.handshakeResponse:
         return 'handshake_resp';
+      case OfflinkMessageType.groupMessage:
+        return 'group_msg';
+      case OfflinkMessageType.groupMembership:
+        return 'group_member';
     }
   }
 
@@ -34,6 +40,10 @@ extension OfflinkMessageTypeCodec on OfflinkMessageType {
         return OfflinkMessageType.handshakeInit;
       case 'handshake_resp':
         return OfflinkMessageType.handshakeResponse;
+      case 'group_msg':
+        return OfflinkMessageType.groupMessage;
+      case 'group_member':
+        return OfflinkMessageType.groupMembership;
       default:
         throw FormatException('Unsupported Offlink message type: $value');
     }

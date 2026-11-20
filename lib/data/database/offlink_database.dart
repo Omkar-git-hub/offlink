@@ -6,13 +6,23 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'tables/conversations_table.dart';
+import 'tables/group_members_table.dart';
+import 'tables/groups_table.dart';
 import 'tables/messages_table.dart';
 import 'tables/queued_packets_table.dart';
 
 part 'offlink_database.g.dart';
 
 /// Central Drift database for local Offlink persistence.
-@DriftDatabase(tables: [ConversationsTable, MessagesTable, QueuedPacketsTable])
+@DriftDatabase(
+  tables: [
+    ConversationsTable,
+    MessagesTable,
+    QueuedPacketsTable,
+    GroupsTable,
+    GroupMembersTable,
+  ],
+)
 class OfflinkDatabase extends _$OfflinkDatabase {
   OfflinkDatabase([QueryExecutor? executor])
     : super(executor ?? _openConnection());
@@ -20,7 +30,7 @@ class OfflinkDatabase extends _$OfflinkDatabase {
   OfflinkDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -31,6 +41,10 @@ class OfflinkDatabase extends _$OfflinkDatabase {
       onUpgrade: (Migrator m, int from, int to) async {
         if (from < 2) {
           await m.createTable(queuedPacketsTable);
+        }
+        if (from < 3) {
+          await m.createTable(groupsTable);
+          await m.createTable(groupMembersTable);
         }
       },
       beforeOpen: (details) async {

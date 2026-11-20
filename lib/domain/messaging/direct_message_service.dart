@@ -79,6 +79,12 @@ class DirectMessageService implements MessageService {
   }
 
   Future<void> _handleIncomingPacket(OfflinkPacket packet) async {
+    // Ignore group packets; handled by GroupMessageService
+    if (packet.messageType == OfflinkMessageType.groupMessage ||
+        packet.messageType == OfflinkMessageType.groupMembership) {
+      return;
+    }
+
     if (packet.messageType == OfflinkMessageType.handshakeInit) {
       if (_secureSessionService == null) {
         return;

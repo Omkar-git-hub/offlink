@@ -7,6 +7,10 @@ import '../bluetooth/ble_models.dart';
 import '../bluetooth/ble_packet_transport.dart';
 import '../bluetooth/phone_ble_connection.dart';
 import '../bluetooth/phone_ble_discovery.dart';
+import '../domain/group/group.dart';
+import '../domain/group/group_member.dart';
+import '../domain/group/group_message_service.dart';
+import '../domain/group/group_repository.dart';
 import '../domain/identity/identity_manager.dart';
 import '../domain/lifecycle/app_lifecycle_coordinator.dart';
 import '../domain/lifecycle/connection_recovery_coordinator.dart';
@@ -16,6 +20,7 @@ import '../domain/messaging/message_service.dart';
 import '../domain/protocol/offlink_message_type.dart';
 import '../domain/protocol/offlink_packet.dart';
 import 'chat/chat_page.dart';
+import 'chat/group_chat_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({
@@ -28,6 +33,8 @@ class HomePage extends StatefulWidget {
     this.identityManager,
     this.messageService,
     this.messageRepository,
+    this.groupMessageService,
+    this.groupRepository,
   });
 
   final PhoneBleConnection bleConnection;
@@ -38,6 +45,8 @@ class HomePage extends StatefulWidget {
   final IdentityManager? identityManager;
   final MessageService? messageService;
   final MessageRepository? messageRepository;
+  final GroupMessageService? groupMessageService;
+  final GroupRepository? groupRepository;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -306,6 +315,120 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _openGroupChat(Group group) {
+    if (widget.groupMessageService == null || widget.groupRepository == null) {
+      return;
+    }
+
+    final localNodeId =
+        widget.identityManager?.currentIdentity?.nodeId ?? 'local-node';
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => GroupChatPage(
+          group: group,
+          groupMessageService: widget.groupMessageService!,
+          groupRepository: widget.groupRepository!,
+          messageRepository: widget.messageRepository,
+          localNodeId: localNodeId,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _promptCreateGroup() async {
+    final nameCtrl = TextEditingController();
+    final selectedPeerIds = <String>{};
+
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Create New Group'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Group Name',
+                      hintText: 'e.g. Field Team',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Select Members:'),
+                  const SizedBox(height: 8),
+                  if (_nearbyPeers.isEmpty)
+                    const Text(
+                      'No nearby peers discovered yet.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    )
+                  else
+                    ..._nearbyPeers.map((peer) {
+                      final isSelected = selectedPeerIds.contains(peer.peerId);
+                      return CheckboxListTile(
+                        value: isSelected,
+                        dense: true,
+                        title: Text(peer.displayName),
+                        subtitle: Text(peer.peerId),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            if (val == true) {
+                              selectedPeerIds.add(peer.peerId);
+                            } else {
+                              selectedPeerIds.remove(peer.peerId);
+                            }
+                          });
+                        },
+                      );
+                    }),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (created == true && nameCtrl.text.trim().isNotEmpty) {
+      final initialMembers = selectedPeerIds.map((peerId) {
+        final peer = _nearbyPeers.firstWhere((p) => p.peerId == peerId);
+        return GroupMember(
+          groupId: '',
+          memberNodeId: peer.peerId,
+          memberDisplayName: peer.displayName,
+          role: GroupMemberRole.member,
+          joinedAt: DateTime.now().toUtc(),
+        );
+      }).toList();
+
+      final newGroup = await widget.groupMessageService!.createGroup(
+        name: nameCtrl.text.trim(),
+        initialMembers: initialMembers,
+      );
+
+      if (mounted) {
+        _openGroupChat(newGroup);
+      }
+    }
+  }
+
   Future<void> _sendTestPacket(BlePeer peer) async {
     final identity = widget.identityManager?.currentIdentity;
     final senderNodeId = identity?.nodeId ?? 'node-local';
@@ -440,6 +563,11 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 16),
               _buildLastReceivedPacketCard(),
             ],
+            if (widget.groupRepository != null &&
+                widget.groupMessageService != null) ...[
+              const SizedBox(height: 20),
+              _buildGroupsSection(),
+            ],
             const SizedBox(height: 20),
             _buildNearbySection(),
           ],
@@ -570,6 +698,79 @@ class _HomePageState extends State<HomePage> {
           color: enabled ? Colors.green : Theme.of(context).colorScheme.outline,
         ),
       ],
+    );
+  }
+
+  Widget _buildGroupsSection() {
+    return StreamBuilder<List<Group>>(
+      stream: widget.groupRepository!.watchAllGroups(),
+      builder: (context, snapshot) {
+        final groups = snapshot.data ?? [];
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Groups (${groups.length})',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                FilledButton.tonalIcon(
+                  onPressed: _promptCreateGroup,
+                  icon: const Icon(Icons.group_add, size: 18),
+                  label: const Text('New Group'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (groups.isEmpty)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.groups_outlined,
+                          size: 40,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'No groups created yet.',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Create a group to chat with multiple nearby peers simultaneously.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else
+              ...groups.map((group) {
+                return Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.groups)),
+                    title: Text(group.name),
+                    subtitle: Text('ID: ${group.id}'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _openGroupChat(group),
+                  ),
+                );
+              }),
+          ],
+        );
+      },
     );
   }
 

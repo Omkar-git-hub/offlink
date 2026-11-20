@@ -66,9 +66,67 @@ void main() {
       },
     );
 
-    test('schema version is 2', () {
-      expect(db.schemaVersion, 2);
+    test('schema version is 3', () {
+      expect(db.schemaVersion, 3);
     });
+
+    test(
+      'enforces foreign key cascading for group members when group is deleted',
+      () async {
+        final now = DateTime.utc(2026, 11, 21, 1, 0);
+
+        await db
+            .into(db.groupsTable)
+            .insert(
+              GroupsTableCompanion.insert(
+                id: 'group-1',
+                name: 'Alpha Team',
+                creatorNodeId: 'node-alice',
+                createdAt: now,
+                updatedAt: now,
+              ),
+            );
+
+        await db
+            .into(db.groupMembersTable)
+            .insert(
+              GroupMembersTableCompanion.insert(
+                groupId: 'group-1',
+                memberNodeId: 'node-alice',
+                memberDisplayName: 'Alice',
+                role: 'admin',
+                joinedAt: now,
+              ),
+            );
+
+        await db
+            .into(db.groupMembersTable)
+            .insert(
+              GroupMembersTableCompanion.insert(
+                groupId: 'group-1',
+                memberNodeId: 'node-bob',
+                memberDisplayName: 'Bob',
+                role: 'member',
+                joinedAt: now,
+              ),
+            );
+
+        final membersBefore = await (db.select(
+          db.groupMembersTable,
+        )..where((t) => t.groupId.equals('group-1'))).get();
+        expect(membersBefore, hasLength(2));
+
+        // Delete group
+        await (db.delete(
+          db.groupsTable,
+        )..where((t) => t.id.equals('group-1'))).go();
+
+        final membersAfter = await (db.select(
+          db.groupMembersTable,
+        )..where((t) => t.groupId.equals('group-1'))).get();
+        expect(membersAfter, isEmpty);
+      },
+    );
 
     test('supports insertion and retrieval in queuedPacketsTable', () async {
       final now = DateTime.utc(2026, 11, 21, 0, 0);

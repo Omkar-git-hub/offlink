@@ -1,38 +1,36 @@
 # AI Progress & Execution Checkpoint
 
 ## Current Module & Feature Branch
-- **Module**: Module 7 — Offline Queue & Store-and-Forward Reliability
-- **Branch**: `feature/offline-queue-store-forward`
+- **Module**: Module 8 — Group Messaging
+- **Branch**: `feature/group-messaging`
 - **Target**: `main`
 
 ## Objective & Acceptance Criteria
-- Persistent Offline Message Queue & Store-and-Forward:
-  - Upgraded SQLite database schema to version 2 with `QueuedPacketsTable` to persist in-transit store-and-forward packets across app restarts and device reboots.
-  - Implemented `QueuedPacket` domain entity and `StoreAndForwardRepository` interface.
-  - Implemented `DriftStoreAndForwardRepository` providing persistent enqueue, lookup, status tracking (`pending`, `forwarded`, `delivered`, `expired`, `failed`), and bounded pruning.
-- Store-and-Forward Delay-Tolerant Networking (DTN):
-  - Implemented `StoreAndForwardManager` coordinating delay-tolerant packet forwarding over BLE mesh.
-  - Packets destined for unreachable peers or broken links are automatically stored in persistent queue instead of being dropped.
-  - When target peer connects directly or a new route is learned, stored packets are opportunistically flushed with decremented TTL (`ttl: packet.ttl - 1`).
-  - Relay Node Privacy: Intermediate relay nodes forward encrypted payloads only; ciphertext is stored as an opaque string without attempting decryption or leaking plaintext.
-- Controlled Retry & Backoff Strategy:
-  - Exponential backoff with randomized jitter (`initialBackoff: 2s`, `multiplier: 2.0`, `maxBackoff: 5m`, jitter: ±20%) to prevent BLE transmission flooding and battery drain.
-  - Immediate opportunistic retry triggers when connectivity changes (`onPeerOrRouteAvailable`) rather than only relying on periodic timers.
-  - Stops retries and marks terminal states when `maxRetries` (default: 5) is reached or packet exceeds expiration (`maxMessageAge: 24h` / `ttl <= 1`).
-- Storage Bounds & Expiration Defense:
-  - Hard storage bound (`maxQueueSize: 200` packets for in-transit forwarding, `500` for outgoing messages) with FIFO/oldest eviction to prevent unbounded SQLite database growth.
-  - Automatic pruning of delivered, expired, or terminal entries.
-- Delivery Reliability & Idempotent Deduplication:
-  - Delivery ACKs correlated by `messageId`.
-  - When an ACK traverses intermediate relays, matching stored packets are immediately purged from the store-and-forward queue.
-  - Reverse path ACK store-and-forward: if sender is temporarily unreachable when ACK arrives, intermediate relay stores and forwards the ACK back to the sender when reconnected.
-  - Recipient Deduplication: If a duplicate message is received (e.g. sender retried because ACK was lost in transit), recipient immediately resends the delivery ACK, but suppresses duplicate events to `incomingMessages` and does not duplicate unread counters.
+- Group Creation, Naming & Local Persistence:
+  - Added `GroupsTable` and `GroupMembersTable` in Drift schema v3 with automatic SQLite cascade deletion.
+  - Implemented `Group` and `GroupMember` domain entities and `GroupRepository` contract.
+  - Implemented `DriftGroupRepository` providing atomic group creation, member listing, member addition/removal, and metadata updates.
+- Group Protocol & Pairwise Session Fanout:
+  - Added `OfflinkMessageType.groupMessage` and `OfflinkMessageType.groupMembership`.
+  - Implemented `GroupMessagePayload` and `GroupMembershipPayload` for JSON wire serialization.
+  - Implemented `GroupMessageService` managing group creation, member invites, member additions/removals, message fanout, reverse-path ACKs, and delivery tracking.
+  - Multi-Hop Relay Privacy: Each group message is encrypted under the recipient member's pairwise session key (`SecureSessionService` via X25519 + AES-256-GCM AEAD). Intermediate relays route ciphertext packets without decrypting or having access to group plaintext or member lists.
+- Security & Revocation Secrecy:
+  - Zero-Plaintext Enforcement: Rejects unencrypted transmission when a cryptographic session service is configured; fails individual member delivery rather than leaking plaintext over the air.
+  - Authorization Verification: Envelope sender must match inner payload sender. Only authorized members can send to a group. Only group admins can add or remove members.
+  - Cryptographic Revocation Secrecy: Removed members are immediately excluded from future message fanouts. Because packets are encrypted with pairwise keys, removed members cannot decrypt future group messages even if acting as intermediate relays.
+- Delivery Status Tracking & Delay-Tolerant Store-and-Forward:
+  - Per-member delivery tracking: ACKs correlate to individual member packets, updating per-member statuses. Group message transitions to `delivered` when all active members ACK.
+  - Delay-Tolerant Store-and-Forward Compatibility: Offline group members have packets stored in relay `StoreAndForwardManager` queues and automatically flushed upon reconnection.
+- Presentation & UX:
+  - Implemented `GroupChatPage` displaying group header, member count, member modal sheet with admin add/remove controls, delivery status icons, and outgoing message bubbles.
+  - Updated `HomePage` with a dedicated Groups section and interactive group creation dialog.
+  - Wired `GroupMessageService` and `DriftGroupRepository` into `main.dart`.
 - Verification Suite:
-  - Comprehensive unit and integration test coverage for repository persistence, queue bounds, backoff retries, duplicate suppression, and full 3-node multi-hop DTN simulation.
-  - `dart format`: PASS (0 formatting differences across 127 files).
+  - Comprehensive unit, integration, and widget tests (239/239 tests passing across entire repository).
+  - `dart format`: PASS (0 differences across 141 files).
   - `flutter analyze`: PASS (0 issues found).
-  - `flutter test`: PASS (222/222 tests passing, 14 new tests added for Module 7).
-  - `flutter build apk --debug`: PASS (built in 123.3s).
+  - `flutter test`: PASS (239/239 tests passing, 17 new tests added for Module 8).
 
 ## Status
 - **Status**: READY FOR PR / MERGE REVIEW
@@ -44,20 +42,18 @@
 4. **Module 4 Merged into main**: PR #15 merged (`bb31a21`).
 5. **Module 5 Merged into main**: PR #16 merged (`8c59131`).
 6. **Module 6 Merged into main**: PR #17 merged (`9729972`).
-7. **Module 7 Offline Queue & Store-and-Forward Reliability**:
-   - Added `QueuedPacketsTable` (`lib/data/database/tables/queued_packets_table.dart`).
-   - Upgraded `OfflinkDatabase` to `schemaVersion: 2` with migration logic.
-   - Regenerated Drift database code via `build_runner`.
-   - Added `getMessageById` and `pruneExpiredMessages` to `MessageRepository` and `DriftMessageRepository`.
-   - Created `QueuedPacket` domain model (`lib/domain/queue/queued_packet.dart`).
-   - Created `StoreAndForwardRepository` (`lib/domain/queue/store_and_forward_repository.dart`).
-   - Implemented `DriftStoreAndForwardRepository` (`lib/data/database/drift_store_and_forward_repository.dart`).
-   - Implemented `StoreAndForwardManager` (`lib/domain/queue/store_and_forward_manager.dart`).
-   - Integrated store-and-forward with `MeshPacketRouter`: enqueueing unroutable packets, flushing on neighbor discovery, and removing on ACK.
-   - Enhanced `DirectMessageService`: offline send handling and recipient idempotent deduplication with reliable ACK re-emission.
-   - Enhanced `PendingMessageRecoveryService`: exponential backoff with jitter, queue limits, message expiration (24h), and opportunistic peer-connection retries.
-   - Wired `StoreAndForwardManager` into `AppLifecycleCoordinator`, `lib/main.dart`, and `HomePage`.
-   - Added 14 new tests across repository, manager, offline messaging, and full 3-node DTN integration.
+7. **Module 7 Merged into main**: PR #18 merged (`93fe8f4`).
+8. **Module 8 Group Messaging**:
+   - Added `GroupsTable` (`lib/data/database/tables/groups_table.dart`) and `GroupMembersTable` (`lib/data/database/tables/group_members_table.dart`).
+   - Upgraded `OfflinkDatabase` to `schemaVersion: 3` with migration logic and regenerated Drift code.
+   - Created `Group` entity (`lib/domain/group/group.dart`) and `GroupMember` entity (`lib/domain/group/group_member.dart`).
+   - Created `GroupRepository` contract (`lib/domain/group/group_repository.dart`) and `DriftGroupRepository` implementation (`lib/data/database/drift_group_repository.dart`).
+   - Extended `OfflinkMessageType` with `groupMessage` and `groupMembership`.
+   - Created `GroupMessagePayload` and `GroupMembershipPayload`.
+   - Implemented `GroupMessageService` (`lib/domain/group/group_message_service.dart`) with pairwise encrypted fanout, authorization enforcement, and per-member delivery tracking.
+   - Implemented `GroupChatPage` (`lib/features/chat/group_chat_page.dart`) with member management sheet and delivery indicators.
+   - Updated `HomePage` and `main.dart` with group chat and repository injection.
+   - Added unit tests for group repository, group messaging service, 4-node multi-hop mesh integration, database schema v3, and group chat widget.
 8. **Architectural Decisions Recorded**:
    - Recorded `DECISION-009` in `docs/development/AI_DECISIONS.md`.
 

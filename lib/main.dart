@@ -8,12 +8,15 @@ import 'core/identity/node_id_generator.dart';
 import 'crypto/identity/identity_key_service.dart';
 import 'crypto/session/secure_session_service.dart';
 import 'data/database/drift_conversation_repository.dart';
+import 'data/database/drift_group_repository.dart';
 import 'data/database/drift_message_repository.dart';
 import 'data/database/drift_store_and_forward_repository.dart';
 import 'data/database/offlink_database.dart';
 import 'data/identity/flutter_secure_identity_storage.dart';
 import 'data/identity/secure_identity_repository.dart';
 import 'data/lifecycle/method_channel_background_service.dart';
+import 'domain/group/group_message_service.dart';
+import 'domain/group/group_repository.dart';
 import 'domain/identity/identity_initialization_service.dart';
 import 'domain/identity/identity_manager.dart';
 import 'domain/lifecycle/app_lifecycle_coordinator.dart';
@@ -73,6 +76,7 @@ Future<void> main() async {
   final messageRepository = DriftMessageRepository(database);
   final conversationRepository = DriftConversationRepository(database);
   final storeAndForwardRepository = DriftStoreAndForwardRepository(database);
+  final groupRepository = DriftGroupRepository(database);
 
   final storeAndForwardManager = StoreAndForwardManager(
     repository: storeAndForwardRepository,
@@ -93,6 +97,15 @@ Future<void> main() async {
   final messageService = DirectMessageService(
     packetTransport: meshPacketRouter,
     identityManager: identityManager,
+    messageRepository: messageRepository,
+    conversationRepository: conversationRepository,
+    secureSessionService: secureSessionService,
+  );
+
+  final groupMessageService = GroupMessageService(
+    packetTransport: meshPacketRouter,
+    identityManager: identityManager,
+    groupRepository: groupRepository,
     messageRepository: messageRepository,
     conversationRepository: conversationRepository,
     secureSessionService: secureSessionService,
@@ -127,6 +140,8 @@ Future<void> main() async {
       connectionRecovery: connectionRecovery,
       messageService: messageService,
       messageRepository: messageRepository,
+      groupMessageService: groupMessageService,
+      groupRepository: groupRepository,
       database: database,
     ),
   );
@@ -144,6 +159,8 @@ class OfflinkApp extends StatefulWidget {
     this.connectionRecovery,
     required this.messageService,
     this.messageRepository,
+    this.groupMessageService,
+    this.groupRepository,
     this.database,
   });
 
@@ -156,6 +173,8 @@ class OfflinkApp extends StatefulWidget {
   final ConnectionRecoveryCoordinator? connectionRecovery;
   final MessageService messageService;
   final MessageRepository? messageRepository;
+  final GroupMessageService? groupMessageService;
+  final GroupRepository? groupRepository;
   final OfflinkDatabase? database;
 
   @override
@@ -186,6 +205,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
   @override
   void dispose() {
     widget.lifecycleCoordinator?.dispose();
+    widget.groupMessageService?.dispose();
     widget.messageService.dispose();
     widget.meshRouter?.dispose();
     widget.packetTransport.dispose();
@@ -213,6 +233,8 @@ class _OfflinkAppState extends State<OfflinkApp> {
               identityManager: widget.identityManager,
               messageService: widget.messageService,
               messageRepository: widget.messageRepository,
+              groupMessageService: widget.groupMessageService,
+              groupRepository: widget.groupRepository,
             )
           : OnboardingPage(onContinue: _createIdentity),
     );
