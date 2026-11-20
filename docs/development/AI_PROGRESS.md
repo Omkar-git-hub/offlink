@@ -1,36 +1,36 @@
 # AI Progress & Execution Checkpoint
 
 ## Current Module & Feature Branch
-- **Module**: Module 5 — Multi-Peer & Mesh Packet Routing
-- **Branch**: `feature/mesh-routing`
+- **Module**: Module 6 — Background Service & App Lifecycle Resilience
+- **Branch**: `feature/background-service-lifecycle`
 - **Target**: `main`
 
 ## Objective & Acceptance Criteria
-- Multi-hop packet routing and forwarding:
-  - `MeshPacketRouter` implements `PacketTransport`, wrapping physical BLE packet transport.
-  - Transparent relaying across intermediate hops.
-- End-to-end privacy preservation across relay nodes:
-  - Relay nodes inspect only packet envelope headers (`messageId`, `senderNodeId`, `recipientNodeId`, `ttl`).
-  - Ciphertext `payload` is forwarded intact without decryption; intermediate nodes lack session keys.
-- Loop prevention & deduplication:
-  - `SeenMessageCache` tracks observed message IDs with bounded capacity (1,000) and entry TTL (10 minutes).
-  - Duplicate packets are dropped immediately and emitted to `droppedPackets`.
-  - Outbound packets from the local node are marked in `SeenMessageCache` to prevent loopbacks.
-- Hop limit & TTL expiration:
-  - Relay forwarding decrements TTL (`ttl: packet.ttl - 1`).
-  - Packets with `ttl <= 1` are dropped as expired and emitted to `droppedPackets`.
-- Dynamic routing & split-horizon flooding:
-  - `RoutingTable` learns reverse routes from incoming traffic and shortest hop count, with 15-minute expiration.
-  - Split-horizon flood suppression: forwarded packets are never flooded back out on the link from which they arrived.
-- Multi-hop delivery confirmations (ACK):
-  - Destination nodes emit `OfflinkMessageType.acknowledgement` packet carrying the original message ID back to sender.
-  - Origin node receives ACK and updates message status in `MessageRepository` to `ChatMessageStatus.delivered`.
+- App lifecycle awareness:
+  - `AppLifecycleManager` observing `WidgetsBindingObserver` for foreground (`resumed`), background (`paused`, `hidden`), inactive, and detached states.
+  - Lifecycle transitions preserve in-memory routing tables, cryptographic session keys, and database connections.
+- Native Android background operation & foreground service:
+  - `OfflinkForegroundService` running as an Android 14+ `connectedDevice` service type (`ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE`).
+  - Low-priority ongoing notification with launch intent on `offlink_background_channel`.
+  - Android permissions configured (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `POST_NOTIFICATIONS`, `WAKE_LOCK`).
+  - `MethodChannelBackgroundService` abstracting platform channel calls behind `BackgroundServiceContract` for clean desktop/test execution.
+- Battery & resource management:
+  - Avoids battery-draining continuous scan loops: pauses aggressive discovery scanning while backgrounded while maintaining peripheral advertising and active GATT connections.
+  - Automatically resumes scanning upon returning to the foreground.
+- Connection recovery:
+  - `ConnectionRecoveryCoordinator` tracks connected peers and monitors unexpected link drops.
+  - Exponential backoff with jitter (`initialDelay: 1s`, `multiplier: 2.0`, `maxDelay: 30s`) capped at `maxAttempts: 5` to prevent retry storms.
+  - Pauses recovery when Bluetooth adapter is disabled and resumes immediately upon Bluetooth restoration.
+- Message reliability & pending recovery:
+  - `PendingMessageRecoveryService` scans `MessageRepository` for unacknowledged outgoing messages older than `ackTimeout`.
+  - Retransmits messages preserving original `messageId` so recipient `insertOnConflictUpdate` and `SeenMessageCache` prevent duplicate messages.
+  - Marks message status as `ChatMessageStatus.failed` when `maxRetries` is exceeded.
 - Verification suite:
-  - Unit and integration tests for deduplication cache, routing table, mesh router forwarding, split-horizon suppression, and 3-node multi-hop E2E encrypted messaging.
-  - `dart format`: PASS (0 differences across 106 files).
-  - `flutter analyze`: PASS (0 issues).
-  - `flutter test`: PASS (187/187 tests passing, 20 new tests added for Module 5).
-  - `flutter build apk --debug`: PASS (app-debug.apk built successfully in 283.1s).
+  - Unit and integration tests covering lifecycle state transitions, background service invocation, exponential backoff reconnection, pending message retransmission with original ID, ACK recovery, and 3-node multi-hop mesh resilience under backgrounding.
+  - `dart format`: PASS (0 differences across 118 files).
+  - `flutter analyze`: PASS (0 issues found).
+  - `flutter test`: PASS (208/208 tests passing, 21 new tests added for Module 6).
+  - `flutter build apk --debug`: PASS (built in 139.1s).
 
 ## Status
 - **Status**: READY FOR PR / MERGE REVIEW
@@ -40,44 +40,45 @@
 2. **Module 2 Merged into main**: PR #13 merged (`1cad75b`).
 3. **Module 3 Merged into main**: PR #14 merged (`3281a90`).
 4. **Module 4 Merged into main**: PR #15 merged (`bb31a21`).
-5. **Module 5 Mesh Routing Subsystem**:
-   - Implemented `copyWith` on `OfflinkPacket` (`lib/domain/protocol/offlink_packet.dart`) for clean TTL decrementing and header preservation.
-   - Added `List<String> get connectedPeerIds` to `PacketTransport` contract (`lib/domain/protocol/packet_transport.dart`).
-   - Implemented `SeenMessageCache` (`lib/domain/mesh/seen_message_cache.dart`) with `markIfUnseen`, `hasSeen`, `markSeen`, auto-pruning expired entries, and capacity bounding.
-   - Implemented `RoutingTable` (`lib/domain/mesh/routing_table.dart`) with route learning, shortest path selection, next-hop tracking, peer route removal, and 15-minute expiration.
-   - Implemented `MeshPacketRouter` (`lib/domain/mesh/mesh_packet_router.dart`) implementing `PacketTransport`:
-     - Deduplication and loopback suppression via `SeenMessageCache`.
-     - Route learning from incoming packet traffic.
-     - Destination check: emits locally destined packets to `incomingPackets` stream.
-     - Relay forwarding: decrements TTL, forwards ciphertext payload without inspection or decryption.
-     - Split-horizon flood suppression: excludes reverse-path source peer.
-     - Dedicated streams: `incomingPackets`, `forwardedPackets`, and `droppedPackets`.
-6. **Delivery Confirmations & Service Integration**:
-   - Updated `DirectMessageService` (`lib/domain/messaging/direct_message_service.dart`) with automatic ACK generation upon message delivery and ACK handling updating `MessageRepository` status to `ChatMessageStatus.delivered`.
-   - Wired `MeshPacketRouter` into composition root in `lib/main.dart` and `lib/features/home_page.dart`.
+5. **Module 5 Merged into main**: PR #16 merged (`8c59131`).
+6. **Module 6 Lifecycle Resilience Subsystem**:
+   - Implemented `BackgroundServiceContract` (`lib/domain/lifecycle/background_service_contract.dart`).
+   - Implemented `MethodChannelBackgroundService` (`lib/data/lifecycle/method_channel_background_service.dart`).
+   - Implemented native `OfflinkForegroundService` in Kotlin (`android/app/src/main/kotlin/com/example/offlink/OfflinkForegroundService.kt`) with Android 14+ `connectedDevice` foreground service type and ongoing notification.
+   - Updated `MainActivity.kt` with `com.example.offlink/background_service` method channel handler.
+   - Updated `AndroidManifest.xml` with foreground service, notification, and Bluetooth permissions.
+   - Implemented `AppLifecycleManager` (`lib/domain/lifecycle/app_lifecycle_manager.dart`) for lifecycle observation.
+   - Implemented `ConnectionRecoveryCoordinator` (`lib/domain/lifecycle/connection_recovery_coordinator.dart`) with exponential backoff, jitter, and retry storm prevention.
+   - Added `getPendingMessages` to `MessageRepository` and `DriftMessageRepository`.
+   - Added `retryMessage` to `DirectMessageService` preserving original message ID.
+   - Implemented `PendingMessageRecoveryService` (`lib/domain/lifecycle/pending_message_recovery_service.dart`).
+   - Implemented `AppLifecycleCoordinator` (`lib/domain/lifecycle/app_lifecycle_coordinator.dart`) orchestrating background service activation, adaptive discovery duty cycle, connection recovery, and pending message retries.
+   - Wired coordinator into composition root (`lib/main.dart` and `HomePage`).
 7. **Architectural Decisions Recorded**:
-   - Recorded `DECISION-007` in `docs/development/AI_DECISIONS.md`.
+   - Recorded `DECISION-008` in `docs/development/AI_DECISIONS.md`.
 
 ## Tests Run & Results
-- `dart format --output=none --set-exit-if-changed .`: PASS (0 differences across 106 files)
+- `dart format --output=none --set-exit-if-changed .`: PASS (0 differences across 118 files)
 - `flutter analyze`: PASS (0 issues found)
-- `flutter test`: PASS (187/187 tests passing, 20 new tests added for Module 5)
-  - `test/unit/mesh/seen_message_cache_test.dart` (5 tests)
-  - `test/unit/mesh/routing_table_test.dart` (7 tests)
-  - `test/unit/mesh/mesh_packet_router_test.dart` (7 tests)
-  - `test/unit/messaging/mesh_messaging_integration_test.dart` (1 test: 3-node Alice -> Bob relay -> Charlie simulation with E2E encryption and multi-hop ACK delivery confirmation)
-- `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built successfully in 283.1s)
+- `flutter test`: PASS (208/208 tests passing, 21 new tests added for Module 6)
+  - `test/unit/lifecycle/app_lifecycle_manager_test.dart` (5 tests)
+  - `test/unit/lifecycle/connection_recovery_coordinator_test.dart` (5 tests)
+  - `test/unit/lifecycle/pending_message_recovery_service_test.dart` (3 tests)
+  - `test/unit/lifecycle/app_lifecycle_coordinator_test.dart` (3 tests)
+  - `test/unit/lifecycle/method_channel_background_service_test.dart` (4 tests)
+  - `test/unit/lifecycle/lifecycle_resilience_integration_test.dart` (1 test: full multi-hop backgrounding, temporary link drop, exponential recovery, and ACK retransmission)
+- `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built successfully in 139.1s)
 
 ## Known Failures & Unresolved Issues
 - None.
 
 ## Exact Next Action
-1. Stage and commit changes to `feature/mesh-routing`.
+1. Stage and commit changes to `feature/background-service-lifecycle`.
 2. Push branch to GitHub.
 3. Open pull request targeting `main`.
 4. Monitor CI workflow run.
 5. Merge PR into `main` following ADR-008 upon user confirmation.
-6. Begin Module 6: Background Service & App Lifecycle Resilience (`feature/background-service`).
+6. Begin Module 7.
 
 ## Next Verification Command
-`gh run list --branch feature/mesh-routing`
+`gh run list --branch feature/background-service-lifecycle`

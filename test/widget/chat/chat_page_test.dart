@@ -110,6 +110,9 @@ class MockMessageRepository implements MessageRepository {
   Future<void> deleteMessagesForConversation(String conversationId) async {
     messages.clear();
   }
+
+  @override
+  Future<List<ChatMessage>> getPendingMessages({int limit = 50}) async => [];
 }
 
 class _TestPacketTransport implements PacketTransport {

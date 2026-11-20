@@ -1,7 +1,7 @@
 class SeenMessageCache {
   SeenMessageCache({
     this.maxCapacity = 1000,
-    this.entryTtl = const Duration(minutes: 10),
+    this.entryTtl = const Duration(seconds: 3),
   });
 
   final int maxCapacity;

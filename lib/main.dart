@@ -12,8 +12,13 @@ import 'data/database/drift_message_repository.dart';
 import 'data/database/offlink_database.dart';
 import 'data/identity/flutter_secure_identity_storage.dart';
 import 'data/identity/secure_identity_repository.dart';
+import 'data/lifecycle/method_channel_background_service.dart';
 import 'domain/identity/identity_initialization_service.dart';
 import 'domain/identity/identity_manager.dart';
+import 'domain/lifecycle/app_lifecycle_coordinator.dart';
+import 'domain/lifecycle/app_lifecycle_manager.dart';
+import 'domain/lifecycle/connection_recovery_coordinator.dart';
+import 'domain/lifecycle/pending_message_recovery_service.dart';
 import 'domain/mesh/mesh_packet_router.dart';
 import 'domain/messaging/direct_message_service.dart';
 import 'domain/messaging/message_repository.dart';
@@ -80,6 +85,23 @@ Future<void> main() async {
     secureSessionService: secureSessionService,
   );
 
+  final backgroundService = MethodChannelBackgroundService();
+  final lifecycleManager = AppLifecycleManager();
+  final connectionRecovery = ConnectionRecoveryCoordinator(
+    connection: bleConnection,
+  );
+  final pendingMessageRecovery = PendingMessageRecoveryService(
+    messageService: messageService,
+    messageRepository: messageRepository,
+  );
+  final lifecycleCoordinator = AppLifecycleCoordinator(
+    lifecycleManager: lifecycleManager,
+    backgroundService: backgroundService,
+    connectionRecovery: connectionRecovery,
+    pendingMessageRecovery: pendingMessageRecovery,
+  );
+  lifecycleCoordinator.initialize();
+
   runApp(
     OfflinkApp(
       identityManager: identityManager,
@@ -87,6 +109,8 @@ Future<void> main() async {
       bleConnection: bleConnection,
       packetTransport: packetTransport,
       meshRouter: meshPacketRouter,
+      lifecycleCoordinator: lifecycleCoordinator,
+      connectionRecovery: connectionRecovery,
       messageService: messageService,
       messageRepository: messageRepository,
       database: database,
@@ -102,6 +126,8 @@ class OfflinkApp extends StatefulWidget {
     required this.bleConnection,
     required this.packetTransport,
     this.meshRouter,
+    this.lifecycleCoordinator,
+    this.connectionRecovery,
     required this.messageService,
     this.messageRepository,
     this.database,
@@ -112,6 +138,8 @@ class OfflinkApp extends StatefulWidget {
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
   final MeshPacketRouter? meshRouter;
+  final AppLifecycleCoordinator? lifecycleCoordinator;
+  final ConnectionRecoveryCoordinator? connectionRecovery;
   final MessageService messageService;
   final MessageRepository? messageRepository;
   final OfflinkDatabase? database;
@@ -143,6 +171,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
 
   @override
   void dispose() {
+    widget.lifecycleCoordinator?.dispose();
     widget.messageService.dispose();
     widget.meshRouter?.dispose();
     widget.packetTransport.dispose();
@@ -165,6 +194,8 @@ class _OfflinkAppState extends State<OfflinkApp> {
               bleConnection: widget.bleConnection,
               packetTransport: widget.packetTransport,
               meshRouter: widget.meshRouter,
+              lifecycleCoordinator: widget.lifecycleCoordinator,
+              connectionRecovery: widget.connectionRecovery,
               identityManager: widget.identityManager,
               messageService: widget.messageService,
               messageRepository: widget.messageRepository,

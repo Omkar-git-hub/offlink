@@ -307,6 +307,48 @@ class DirectMessageService implements MessageService {
     return message;
   }
 
+  Future<void> retryMessage({
+    required ChatMessage message,
+    String? peerId,
+  }) async {
+    final targetPeer = peerId ?? message.recipientNodeId;
+    final now = DateTime.now().toUtc();
+
+    OfflinkPacket packet;
+    if (_secureSessionService != null &&
+        _secureSessionService.hasSession(message.recipientNodeId)) {
+      final encryptedPayload = await _secureSessionService.encrypt(
+        peerNodeId: message.recipientNodeId,
+        plaintext: message.content,
+        messageId: message.id,
+        senderNodeId: message.senderNodeId,
+        recipientNodeId: message.recipientNodeId,
+      );
+
+      packet = OfflinkPacket(
+        messageId: message.id,
+        senderNodeId: message.senderNodeId,
+        recipientNodeId: message.recipientNodeId,
+        messageType: OfflinkMessageType.encrypted,
+        timestamp: now,
+        ttl: 4,
+        payload: encryptedPayload.encode(),
+      );
+    } else {
+      packet = OfflinkPacket(
+        messageId: message.id,
+        senderNodeId: message.senderNodeId,
+        recipientNodeId: message.recipientNodeId,
+        messageType: OfflinkMessageType.text,
+        timestamp: now,
+        ttl: 4,
+        payload: message.content,
+      );
+    }
+
+    await _packetTransport.sendPacket(peerId: targetPeer, packet: packet);
+  }
+
   @override
   void dispose() {
     _subscription?.cancel();

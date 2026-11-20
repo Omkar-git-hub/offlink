@@ -72,6 +72,16 @@ class DriftMessageRepository implements MessageRepository {
     await query.go();
   }
 
+  @override
+  Future<List<ChatMessage>> getPendingMessages({int limit = 50}) async {
+    final query = _db.select(_db.messagesTable)
+      ..where((t) => t.isOutgoing.equals(true) & t.status.equals('sent'))
+      ..orderBy([(t) => OrderingTerm.asc(t.timestamp)])
+      ..limit(limit);
+    final rows = await query.get();
+    return rows.map(_mapRowToEntity).toList();
+  }
+
   ChatMessage _mapRowToEntity(MessagesTableData row) {
     return ChatMessage(
       id: row.id,
