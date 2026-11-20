@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../bluetooth/discovery.dart';
+import '../queue/store_and_forward_manager.dart';
 import 'app_lifecycle_manager.dart';
 import 'background_service_contract.dart';
 import 'connection_recovery_coordinator.dart';
@@ -15,11 +16,13 @@ class AppLifecycleCoordinator {
     required BackgroundServiceContract backgroundService,
     required ConnectionRecoveryCoordinator connectionRecovery,
     required PendingMessageRecoveryService pendingMessageRecovery,
+    StoreAndForwardManager? storeAndForwardManager,
     BleDiscovery? discovery,
   }) : _lifecycleManager = lifecycleManager,
        _backgroundService = backgroundService,
        _connectionRecovery = connectionRecovery,
        _pendingMessageRecovery = pendingMessageRecovery,
+       _storeAndForwardManager = storeAndForwardManager,
        _discovery = discovery {
     _subscription = _lifecycleManager.lifecycleChanges.listen(
       _handleLifecycleTransition,
@@ -30,6 +33,7 @@ class AppLifecycleCoordinator {
   final BackgroundServiceContract _backgroundService;
   final ConnectionRecoveryCoordinator _connectionRecovery;
   final PendingMessageRecoveryService _pendingMessageRecovery;
+  final StoreAndForwardManager? _storeAndForwardManager;
   final BleDiscovery? _discovery;
 
   StreamSubscription<AppLifecycleState>? _subscription;
@@ -40,11 +44,13 @@ class AppLifecycleCoordinator {
   ConnectionRecoveryCoordinator get connectionRecovery => _connectionRecovery;
   PendingMessageRecoveryService get pendingMessageRecovery =>
       _pendingMessageRecovery;
+  StoreAndForwardManager? get storeAndForwardManager => _storeAndForwardManager;
   bool get isBackgroundServiceActive => _isBackgroundServiceActive;
 
   void initialize() {
     _lifecycleManager.startObserving();
     _pendingMessageRecovery.start();
+    _storeAndForwardManager?.start();
   }
 
   Future<void> _handleLifecycleTransition(AppLifecycleState state) async {
@@ -70,7 +76,10 @@ class AppLifecycleCoordinator {
     // 1. Process pending unacknowledged messages
     await _pendingMessageRecovery.processPendingMessages();
 
-    // 2. Ensure discovery scanning is restarted if stopped
+    // 2. Process store and forward queue
+    await _storeAndForwardManager?.processStoreAndForward();
+
+    // 3. Ensure discovery scanning is restarted if stopped
     if (_discovery != null) {
       try {
         await _discovery.startScanning();
@@ -113,6 +122,7 @@ class AppLifecycleCoordinator {
     _subscription = null;
     _pendingMessageRecovery.dispose();
     _connectionRecovery.dispose();
+    _storeAndForwardManager?.dispose();
     _lifecycleManager.dispose();
   }
 }

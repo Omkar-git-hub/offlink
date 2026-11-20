@@ -27,4 +27,12 @@ abstract class MessageRepository {
   /// Retrieves pending outgoing messages awaiting delivery confirmation.
   Future<List<ChatMessage>> getPendingMessages({int limit = 50}) =>
       Future.value(const []);
+
+  /// Retrieves a message by its unique [messageId].
+  Future<ChatMessage?> getMessageById(String messageId) => Future.value(null);
+
+  /// Marks unacknowledged outgoing messages older than [maxAge] as failed.
+  Future<int> pruneExpiredMessages({
+    Duration maxAge = const Duration(hours: 24),
+  }) => Future.value(0);
 }

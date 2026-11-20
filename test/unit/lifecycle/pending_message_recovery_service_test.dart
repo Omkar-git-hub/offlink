@@ -28,6 +28,17 @@ class _MockMessageRepo implements MessageRepository {
       List.from(pending);
 
   @override
+  Future<ChatMessage?> getMessageById(String messageId) async {
+    final matches = pending.where((m) => m.id == messageId);
+    return matches.isEmpty ? null : matches.first;
+  }
+
+  @override
+  Future<int> pruneExpiredMessages({
+    Duration maxAge = const Duration(hours: 24),
+  }) async => 0;
+
+  @override
   Future<void> updateMessageStatus(
     String messageId,
     ChatMessageStatus status,

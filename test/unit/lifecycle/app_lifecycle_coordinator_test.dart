@@ -91,6 +91,12 @@ class _DummyRepo implements MessageRepository {
   @override
   Future<List<ChatMessage>> getPendingMessages({int limit = 50}) async => [];
   @override
+  Future<ChatMessage?> getMessageById(String messageId) async => null;
+  @override
+  Future<int> pruneExpiredMessages({
+    Duration maxAge = const Duration(hours: 24),
+  }) async => 0;
+  @override
   Future<void> updateMessageStatus(
     String messageId,
     ChatMessageStatus status,

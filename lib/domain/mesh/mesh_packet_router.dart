@@ -2,8 +2,10 @@
 
 import 'dart:async';
 
+import '../protocol/offlink_message_type.dart';
 import '../protocol/offlink_packet.dart';
 import '../protocol/packet_transport.dart';
+import '../queue/store_and_forward_manager.dart';
 import 'routing_table.dart';
 import 'seen_message_cache.dart';
 
@@ -15,11 +17,13 @@ class MeshPacketRouter implements PacketTransport {
     RoutingTable? routingTable,
     List<String> Function()? getConnectedPeerIds,
     this.defaultTtl = 4,
+    StoreAndForwardManager? storeAndForwardManager,
   }) : _transport = transport,
        _getLocalNodeId = getLocalNodeId,
        _seenCache = seenCache ?? SeenMessageCache(),
        _routingTable = routingTable ?? RoutingTable(),
        _getConnectedPeerIds = getConnectedPeerIds {
+    this.storeAndForwardManager = storeAndForwardManager;
     _transportSubscription = _transport.incomingPackets.listen(
       _handleIncomingPacket,
     );
@@ -31,6 +35,7 @@ class MeshPacketRouter implements PacketTransport {
   final RoutingTable _routingTable;
   final List<String> Function()? _getConnectedPeerIds;
   final int defaultTtl;
+  StoreAndForwardManager? storeAndForwardManager;
 
   final StreamController<OfflinkPacket> _inboundPackets =
       StreamController<OfflinkPacket>.broadcast();
@@ -66,6 +71,7 @@ class MeshPacketRouter implements PacketTransport {
       nextHopPeerId: peerId,
       hopCount: 1,
     );
+    storeAndForwardManager?.onPeerOrRouteAvailable(peerId);
   }
 
   void removePeer(String peerId) {
@@ -114,6 +120,10 @@ class MeshPacketRouter implements PacketTransport {
     }
 
     // 3. Destination evaluation:
+    if (packet.messageType == OfflinkMessageType.acknowledgement) {
+      await storeAndForwardManager?.onAckReceived(packet.payload);
+    }
+
     final isForLocal =
         packet.recipientNodeId == localNodeId || packet.recipientNodeId == '*';
 
@@ -148,6 +158,7 @@ class MeshPacketRouter implements PacketTransport {
     final knownRoute = _routingTable.getRoute(forwarded.recipientNodeId);
     final activeNeighbors = connectedPeerIds;
 
+    var deliveredOrFlooded = false;
     if (knownRoute != null &&
         activeNeighbors.contains(knownRoute.nextHopPeerId)) {
       // Forward directly to next hop
@@ -156,9 +167,10 @@ class MeshPacketRouter implements PacketTransport {
           peerId: knownRoute.nextHopPeerId,
           packet: forwarded,
         );
+        deliveredOrFlooded = true;
       } catch (_) {
         // Fallback to flood if direct link fails
-        await _floodPacket(
+        deliveredOrFlooded = await _floodPacket(
           forwarded,
           excludePeerId: fromPeerId ?? knownRoute.nextHopPeerId,
         );
@@ -169,11 +181,20 @@ class MeshPacketRouter implements PacketTransport {
       final reverseRoute = _routingTable.getRoute(forwarded.senderNodeId);
       final excludePeer =
           fromPeerId ?? reverseRoute?.nextHopPeerId ?? forwarded.senderNodeId;
-      await _floodPacket(forwarded, excludePeerId: excludePeer);
+      deliveredOrFlooded = await _floodPacket(
+        forwarded,
+        excludePeerId: excludePeer,
+      );
+    }
+
+    // If packet could not be immediately forwarded to any active peer,
+    // store for forward when a viable route/neighbor appears.
+    if (!deliveredOrFlooded && storeAndForwardManager != null) {
+      await storeAndForwardManager!.enqueueInTransitPacket(forwarded);
     }
   }
 
-  Future<void> _floodPacket(
+  Future<bool> _floodPacket(
     OfflinkPacket packet, {
     String? excludePeerId,
   }) async {
@@ -186,20 +207,25 @@ class MeshPacketRouter implements PacketTransport {
           peerId: packet.recipientNodeId,
           packet: packet,
         );
-      } catch (_) {}
-      return;
+        return true;
+      } catch (_) {
+        return false;
+      }
     }
 
+    var sentToAny = false;
     for (final peerId in neighbors) {
       if (peerId == excludePeerId) {
         continue;
       }
       try {
         await _transport.sendPacket(peerId: peerId, packet: packet);
+        sentToAny = true;
       } catch (_) {
         // Continue flooding to other peers even if one link fails.
       }
     }
+    return sentToAny;
   }
 
   @override
@@ -226,7 +252,10 @@ class MeshPacketRouter implements PacketTransport {
     }
 
     // 3. Otherwise, flood to all connected peers.
-    await _floodPacket(packet);
+    final sent = await _floodPacket(packet);
+    if (!sent && storeAndForwardManager != null) {
+      await storeAndForwardManager!.enqueueInTransitPacket(packet);
+    }
   }
 
   void dispose() {

@@ -974,12 +974,687 @@ class MessagesTableCompanion extends UpdateCompanion<MessagesTableData> {
   }
 }
 
+class $QueuedPacketsTableTable extends QueuedPacketsTable
+    with TableInfo<$QueuedPacketsTableTable, QueuedPacketsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $QueuedPacketsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _senderNodeIdMeta = const VerificationMeta(
+    'senderNodeId',
+  );
+  @override
+  late final GeneratedColumn<String> senderNodeId = GeneratedColumn<String>(
+    'sender_node_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _recipientNodeIdMeta = const VerificationMeta(
+    'recipientNodeId',
+  );
+  @override
+  late final GeneratedColumn<String> recipientNodeId = GeneratedColumn<String>(
+    'recipient_node_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _messageTypeMeta = const VerificationMeta(
+    'messageType',
+  );
+  @override
+  late final GeneratedColumn<String> messageType = GeneratedColumn<String>(
+    'message_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
+    'payload',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _timestampMeta = const VerificationMeta(
+    'timestamp',
+  );
+  @override
+  late final GeneratedColumn<DateTime> timestamp = GeneratedColumn<DateTime>(
+    'timestamp',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ttlMeta = const VerificationMeta('ttl');
+  @override
+  late final GeneratedColumn<int> ttl = GeneratedColumn<int>(
+    'ttl',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _retryCountMeta = const VerificationMeta(
+    'retryCount',
+  );
+  @override
+  late final GeneratedColumn<int> retryCount = GeneratedColumn<int>(
+    'retry_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _nextAttemptAtMeta = const VerificationMeta(
+    'nextAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> nextAttemptAt =
+      GeneratedColumn<DateTime>(
+        'next_attempt_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('pending'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    senderNodeId,
+    recipientNodeId,
+    messageType,
+    payload,
+    timestamp,
+    ttl,
+    createdAt,
+    retryCount,
+    nextAttemptAt,
+    status,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'queued_packets_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<QueuedPacketsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('sender_node_id')) {
+      context.handle(
+        _senderNodeIdMeta,
+        senderNodeId.isAcceptableOrUnknown(
+          data['sender_node_id']!,
+          _senderNodeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_senderNodeIdMeta);
+    }
+    if (data.containsKey('recipient_node_id')) {
+      context.handle(
+        _recipientNodeIdMeta,
+        recipientNodeId.isAcceptableOrUnknown(
+          data['recipient_node_id']!,
+          _recipientNodeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_recipientNodeIdMeta);
+    }
+    if (data.containsKey('message_type')) {
+      context.handle(
+        _messageTypeMeta,
+        messageType.isAcceptableOrUnknown(
+          data['message_type']!,
+          _messageTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_messageTypeMeta);
+    }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_payloadMeta);
+    }
+    if (data.containsKey('timestamp')) {
+      context.handle(
+        _timestampMeta,
+        timestamp.isAcceptableOrUnknown(data['timestamp']!, _timestampMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_timestampMeta);
+    }
+    if (data.containsKey('ttl')) {
+      context.handle(
+        _ttlMeta,
+        ttl.isAcceptableOrUnknown(data['ttl']!, _ttlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ttlMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('retry_count')) {
+      context.handle(
+        _retryCountMeta,
+        retryCount.isAcceptableOrUnknown(data['retry_count']!, _retryCountMeta),
+      );
+    }
+    if (data.containsKey('next_attempt_at')) {
+      context.handle(
+        _nextAttemptAtMeta,
+        nextAttemptAt.isAcceptableOrUnknown(
+          data['next_attempt_at']!,
+          _nextAttemptAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_nextAttemptAtMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  QueuedPacketsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return QueuedPacketsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      senderNodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sender_node_id'],
+      )!,
+      recipientNodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recipient_node_id'],
+      )!,
+      messageType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_type'],
+      )!,
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload'],
+      )!,
+      timestamp: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}timestamp'],
+      )!,
+      ttl: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ttl'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      retryCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}retry_count'],
+      )!,
+      nextAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}next_attempt_at'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+    );
+  }
+
+  @override
+  $QueuedPacketsTableTable createAlias(String alias) {
+    return $QueuedPacketsTableTable(attachedDatabase, alias);
+  }
+}
+
+class QueuedPacketsTableData extends DataClass
+    implements Insertable<QueuedPacketsTableData> {
+  final String id;
+  final String senderNodeId;
+  final String recipientNodeId;
+  final String messageType;
+  final String payload;
+  final DateTime timestamp;
+  final int ttl;
+  final DateTime createdAt;
+  final int retryCount;
+  final DateTime nextAttemptAt;
+  final String status;
+  const QueuedPacketsTableData({
+    required this.id,
+    required this.senderNodeId,
+    required this.recipientNodeId,
+    required this.messageType,
+    required this.payload,
+    required this.timestamp,
+    required this.ttl,
+    required this.createdAt,
+    required this.retryCount,
+    required this.nextAttemptAt,
+    required this.status,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['sender_node_id'] = Variable<String>(senderNodeId);
+    map['recipient_node_id'] = Variable<String>(recipientNodeId);
+    map['message_type'] = Variable<String>(messageType);
+    map['payload'] = Variable<String>(payload);
+    map['timestamp'] = Variable<DateTime>(timestamp);
+    map['ttl'] = Variable<int>(ttl);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['retry_count'] = Variable<int>(retryCount);
+    map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt);
+    map['status'] = Variable<String>(status);
+    return map;
+  }
+
+  QueuedPacketsTableCompanion toCompanion(bool nullToAbsent) {
+    return QueuedPacketsTableCompanion(
+      id: Value(id),
+      senderNodeId: Value(senderNodeId),
+      recipientNodeId: Value(recipientNodeId),
+      messageType: Value(messageType),
+      payload: Value(payload),
+      timestamp: Value(timestamp),
+      ttl: Value(ttl),
+      createdAt: Value(createdAt),
+      retryCount: Value(retryCount),
+      nextAttemptAt: Value(nextAttemptAt),
+      status: Value(status),
+    );
+  }
+
+  factory QueuedPacketsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return QueuedPacketsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      senderNodeId: serializer.fromJson<String>(json['senderNodeId']),
+      recipientNodeId: serializer.fromJson<String>(json['recipientNodeId']),
+      messageType: serializer.fromJson<String>(json['messageType']),
+      payload: serializer.fromJson<String>(json['payload']),
+      timestamp: serializer.fromJson<DateTime>(json['timestamp']),
+      ttl: serializer.fromJson<int>(json['ttl']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      retryCount: serializer.fromJson<int>(json['retryCount']),
+      nextAttemptAt: serializer.fromJson<DateTime>(json['nextAttemptAt']),
+      status: serializer.fromJson<String>(json['status']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'senderNodeId': serializer.toJson<String>(senderNodeId),
+      'recipientNodeId': serializer.toJson<String>(recipientNodeId),
+      'messageType': serializer.toJson<String>(messageType),
+      'payload': serializer.toJson<String>(payload),
+      'timestamp': serializer.toJson<DateTime>(timestamp),
+      'ttl': serializer.toJson<int>(ttl),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'retryCount': serializer.toJson<int>(retryCount),
+      'nextAttemptAt': serializer.toJson<DateTime>(nextAttemptAt),
+      'status': serializer.toJson<String>(status),
+    };
+  }
+
+  QueuedPacketsTableData copyWith({
+    String? id,
+    String? senderNodeId,
+    String? recipientNodeId,
+    String? messageType,
+    String? payload,
+    DateTime? timestamp,
+    int? ttl,
+    DateTime? createdAt,
+    int? retryCount,
+    DateTime? nextAttemptAt,
+    String? status,
+  }) => QueuedPacketsTableData(
+    id: id ?? this.id,
+    senderNodeId: senderNodeId ?? this.senderNodeId,
+    recipientNodeId: recipientNodeId ?? this.recipientNodeId,
+    messageType: messageType ?? this.messageType,
+    payload: payload ?? this.payload,
+    timestamp: timestamp ?? this.timestamp,
+    ttl: ttl ?? this.ttl,
+    createdAt: createdAt ?? this.createdAt,
+    retryCount: retryCount ?? this.retryCount,
+    nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+    status: status ?? this.status,
+  );
+  QueuedPacketsTableData copyWithCompanion(QueuedPacketsTableCompanion data) {
+    return QueuedPacketsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      senderNodeId: data.senderNodeId.present
+          ? data.senderNodeId.value
+          : this.senderNodeId,
+      recipientNodeId: data.recipientNodeId.present
+          ? data.recipientNodeId.value
+          : this.recipientNodeId,
+      messageType: data.messageType.present
+          ? data.messageType.value
+          : this.messageType,
+      payload: data.payload.present ? data.payload.value : this.payload,
+      timestamp: data.timestamp.present ? data.timestamp.value : this.timestamp,
+      ttl: data.ttl.present ? data.ttl.value : this.ttl,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      retryCount: data.retryCount.present
+          ? data.retryCount.value
+          : this.retryCount,
+      nextAttemptAt: data.nextAttemptAt.present
+          ? data.nextAttemptAt.value
+          : this.nextAttemptAt,
+      status: data.status.present ? data.status.value : this.status,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('QueuedPacketsTableData(')
+          ..write('id: $id, ')
+          ..write('senderNodeId: $senderNodeId, ')
+          ..write('recipientNodeId: $recipientNodeId, ')
+          ..write('messageType: $messageType, ')
+          ..write('payload: $payload, ')
+          ..write('timestamp: $timestamp, ')
+          ..write('ttl: $ttl, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('status: $status')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    senderNodeId,
+    recipientNodeId,
+    messageType,
+    payload,
+    timestamp,
+    ttl,
+    createdAt,
+    retryCount,
+    nextAttemptAt,
+    status,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is QueuedPacketsTableData &&
+          other.id == this.id &&
+          other.senderNodeId == this.senderNodeId &&
+          other.recipientNodeId == this.recipientNodeId &&
+          other.messageType == this.messageType &&
+          other.payload == this.payload &&
+          other.timestamp == this.timestamp &&
+          other.ttl == this.ttl &&
+          other.createdAt == this.createdAt &&
+          other.retryCount == this.retryCount &&
+          other.nextAttemptAt == this.nextAttemptAt &&
+          other.status == this.status);
+}
+
+class QueuedPacketsTableCompanion
+    extends UpdateCompanion<QueuedPacketsTableData> {
+  final Value<String> id;
+  final Value<String> senderNodeId;
+  final Value<String> recipientNodeId;
+  final Value<String> messageType;
+  final Value<String> payload;
+  final Value<DateTime> timestamp;
+  final Value<int> ttl;
+  final Value<DateTime> createdAt;
+  final Value<int> retryCount;
+  final Value<DateTime> nextAttemptAt;
+  final Value<String> status;
+  final Value<int> rowid;
+  const QueuedPacketsTableCompanion({
+    this.id = const Value.absent(),
+    this.senderNodeId = const Value.absent(),
+    this.recipientNodeId = const Value.absent(),
+    this.messageType = const Value.absent(),
+    this.payload = const Value.absent(),
+    this.timestamp = const Value.absent(),
+    this.ttl = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.nextAttemptAt = const Value.absent(),
+    this.status = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  QueuedPacketsTableCompanion.insert({
+    required String id,
+    required String senderNodeId,
+    required String recipientNodeId,
+    required String messageType,
+    required String payload,
+    required DateTime timestamp,
+    required int ttl,
+    required DateTime createdAt,
+    this.retryCount = const Value.absent(),
+    required DateTime nextAttemptAt,
+    this.status = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       senderNodeId = Value(senderNodeId),
+       recipientNodeId = Value(recipientNodeId),
+       messageType = Value(messageType),
+       payload = Value(payload),
+       timestamp = Value(timestamp),
+       ttl = Value(ttl),
+       createdAt = Value(createdAt),
+       nextAttemptAt = Value(nextAttemptAt);
+  static Insertable<QueuedPacketsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? senderNodeId,
+    Expression<String>? recipientNodeId,
+    Expression<String>? messageType,
+    Expression<String>? payload,
+    Expression<DateTime>? timestamp,
+    Expression<int>? ttl,
+    Expression<DateTime>? createdAt,
+    Expression<int>? retryCount,
+    Expression<DateTime>? nextAttemptAt,
+    Expression<String>? status,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (senderNodeId != null) 'sender_node_id': senderNodeId,
+      if (recipientNodeId != null) 'recipient_node_id': recipientNodeId,
+      if (messageType != null) 'message_type': messageType,
+      if (payload != null) 'payload': payload,
+      if (timestamp != null) 'timestamp': timestamp,
+      if (ttl != null) 'ttl': ttl,
+      if (createdAt != null) 'created_at': createdAt,
+      if (retryCount != null) 'retry_count': retryCount,
+      if (nextAttemptAt != null) 'next_attempt_at': nextAttemptAt,
+      if (status != null) 'status': status,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  QueuedPacketsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? senderNodeId,
+    Value<String>? recipientNodeId,
+    Value<String>? messageType,
+    Value<String>? payload,
+    Value<DateTime>? timestamp,
+    Value<int>? ttl,
+    Value<DateTime>? createdAt,
+    Value<int>? retryCount,
+    Value<DateTime>? nextAttemptAt,
+    Value<String>? status,
+    Value<int>? rowid,
+  }) {
+    return QueuedPacketsTableCompanion(
+      id: id ?? this.id,
+      senderNodeId: senderNodeId ?? this.senderNodeId,
+      recipientNodeId: recipientNodeId ?? this.recipientNodeId,
+      messageType: messageType ?? this.messageType,
+      payload: payload ?? this.payload,
+      timestamp: timestamp ?? this.timestamp,
+      ttl: ttl ?? this.ttl,
+      createdAt: createdAt ?? this.createdAt,
+      retryCount: retryCount ?? this.retryCount,
+      nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
+      status: status ?? this.status,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (senderNodeId.present) {
+      map['sender_node_id'] = Variable<String>(senderNodeId.value);
+    }
+    if (recipientNodeId.present) {
+      map['recipient_node_id'] = Variable<String>(recipientNodeId.value);
+    }
+    if (messageType.present) {
+      map['message_type'] = Variable<String>(messageType.value);
+    }
+    if (payload.present) {
+      map['payload'] = Variable<String>(payload.value);
+    }
+    if (timestamp.present) {
+      map['timestamp'] = Variable<DateTime>(timestamp.value);
+    }
+    if (ttl.present) {
+      map['ttl'] = Variable<int>(ttl.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (retryCount.present) {
+      map['retry_count'] = Variable<int>(retryCount.value);
+    }
+    if (nextAttemptAt.present) {
+      map['next_attempt_at'] = Variable<DateTime>(nextAttemptAt.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('QueuedPacketsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('senderNodeId: $senderNodeId, ')
+          ..write('recipientNodeId: $recipientNodeId, ')
+          ..write('messageType: $messageType, ')
+          ..write('payload: $payload, ')
+          ..write('timestamp: $timestamp, ')
+          ..write('ttl: $ttl, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('nextAttemptAt: $nextAttemptAt, ')
+          ..write('status: $status, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$OfflinkDatabase extends GeneratedDatabase {
   _$OfflinkDatabase(QueryExecutor e) : super(e);
   $OfflinkDatabaseManager get managers => $OfflinkDatabaseManager(this);
   late final $ConversationsTableTable conversationsTable =
       $ConversationsTableTable(this);
   late final $MessagesTableTable messagesTable = $MessagesTableTable(this);
+  late final $QueuedPacketsTableTable queuedPacketsTable =
+      $QueuedPacketsTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -987,6 +1662,7 @@ abstract class _$OfflinkDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     conversationsTable,
     messagesTable,
+    queuedPacketsTable,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -1743,6 +2419,354 @@ typedef $$MessagesTableTableProcessedTableManager =
       MessagesTableData,
       PrefetchHooks Function({bool conversationId})
     >;
+typedef $$QueuedPacketsTableTableCreateCompanionBuilder =
+    QueuedPacketsTableCompanion Function({
+      required String id,
+      required String senderNodeId,
+      required String recipientNodeId,
+      required String messageType,
+      required String payload,
+      required DateTime timestamp,
+      required int ttl,
+      required DateTime createdAt,
+      Value<int> retryCount,
+      required DateTime nextAttemptAt,
+      Value<String> status,
+      Value<int> rowid,
+    });
+typedef $$QueuedPacketsTableTableUpdateCompanionBuilder =
+    QueuedPacketsTableCompanion Function({
+      Value<String> id,
+      Value<String> senderNodeId,
+      Value<String> recipientNodeId,
+      Value<String> messageType,
+      Value<String> payload,
+      Value<DateTime> timestamp,
+      Value<int> ttl,
+      Value<DateTime> createdAt,
+      Value<int> retryCount,
+      Value<DateTime> nextAttemptAt,
+      Value<String> status,
+      Value<int> rowid,
+    });
+
+class $$QueuedPacketsTableTableFilterComposer
+    extends Composer<_$OfflinkDatabase, $QueuedPacketsTableTable> {
+  $$QueuedPacketsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get senderNodeId => $composableBuilder(
+    column: $table.senderNodeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recipientNodeId => $composableBuilder(
+    column: $table.recipientNodeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get messageType => $composableBuilder(
+    column: $table.messageType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get timestamp => $composableBuilder(
+    column: $table.timestamp,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ttl => $composableBuilder(
+    column: $table.ttl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$QueuedPacketsTableTableOrderingComposer
+    extends Composer<_$OfflinkDatabase, $QueuedPacketsTableTable> {
+  $$QueuedPacketsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get senderNodeId => $composableBuilder(
+    column: $table.senderNodeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get recipientNodeId => $composableBuilder(
+    column: $table.recipientNodeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get messageType => $composableBuilder(
+    column: $table.messageType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get timestamp => $composableBuilder(
+    column: $table.timestamp,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ttl => $composableBuilder(
+    column: $table.ttl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$QueuedPacketsTableTableAnnotationComposer
+    extends Composer<_$OfflinkDatabase, $QueuedPacketsTableTable> {
+  $$QueuedPacketsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get senderNodeId => $composableBuilder(
+    column: $table.senderNodeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get recipientNodeId => $composableBuilder(
+    column: $table.recipientNodeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get messageType => $composableBuilder(
+    column: $table.messageType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get timestamp =>
+      $composableBuilder(column: $table.timestamp, builder: (column) => column);
+
+  GeneratedColumn<int> get ttl =>
+      $composableBuilder(column: $table.ttl, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get nextAttemptAt => $composableBuilder(
+    column: $table.nextAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+}
+
+class $$QueuedPacketsTableTableTableManager
+    extends
+        RootTableManager<
+          _$OfflinkDatabase,
+          $QueuedPacketsTableTable,
+          QueuedPacketsTableData,
+          $$QueuedPacketsTableTableFilterComposer,
+          $$QueuedPacketsTableTableOrderingComposer,
+          $$QueuedPacketsTableTableAnnotationComposer,
+          $$QueuedPacketsTableTableCreateCompanionBuilder,
+          $$QueuedPacketsTableTableUpdateCompanionBuilder,
+          (
+            QueuedPacketsTableData,
+            BaseReferences<
+              _$OfflinkDatabase,
+              $QueuedPacketsTableTable,
+              QueuedPacketsTableData
+            >,
+          ),
+          QueuedPacketsTableData,
+          PrefetchHooks Function()
+        > {
+  $$QueuedPacketsTableTableTableManager(
+    _$OfflinkDatabase db,
+    $QueuedPacketsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$QueuedPacketsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$QueuedPacketsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$QueuedPacketsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> senderNodeId = const Value.absent(),
+                Value<String> recipientNodeId = const Value.absent(),
+                Value<String> messageType = const Value.absent(),
+                Value<String> payload = const Value.absent(),
+                Value<DateTime> timestamp = const Value.absent(),
+                Value<int> ttl = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> retryCount = const Value.absent(),
+                Value<DateTime> nextAttemptAt = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => QueuedPacketsTableCompanion(
+                id: id,
+                senderNodeId: senderNodeId,
+                recipientNodeId: recipientNodeId,
+                messageType: messageType,
+                payload: payload,
+                timestamp: timestamp,
+                ttl: ttl,
+                createdAt: createdAt,
+                retryCount: retryCount,
+                nextAttemptAt: nextAttemptAt,
+                status: status,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String senderNodeId,
+                required String recipientNodeId,
+                required String messageType,
+                required String payload,
+                required DateTime timestamp,
+                required int ttl,
+                required DateTime createdAt,
+                Value<int> retryCount = const Value.absent(),
+                required DateTime nextAttemptAt,
+                Value<String> status = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => QueuedPacketsTableCompanion.insert(
+                id: id,
+                senderNodeId: senderNodeId,
+                recipientNodeId: recipientNodeId,
+                messageType: messageType,
+                payload: payload,
+                timestamp: timestamp,
+                ttl: ttl,
+                createdAt: createdAt,
+                retryCount: retryCount,
+                nextAttemptAt: nextAttemptAt,
+                status: status,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$QueuedPacketsTableTable, QueuedPacketsTableData>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$OfflinkDatabase,
+                    $QueuedPacketsTableTable,
+                    QueuedPacketsTableData
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$QueuedPacketsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$OfflinkDatabase,
+      $QueuedPacketsTableTable,
+      QueuedPacketsTableData,
+      $$QueuedPacketsTableTableFilterComposer,
+      $$QueuedPacketsTableTableOrderingComposer,
+      $$QueuedPacketsTableTableAnnotationComposer,
+      $$QueuedPacketsTableTableCreateCompanionBuilder,
+      $$QueuedPacketsTableTableUpdateCompanionBuilder,
+      (
+        QueuedPacketsTableData,
+        BaseReferences<
+          _$OfflinkDatabase,
+          $QueuedPacketsTableTable,
+          QueuedPacketsTableData
+        >,
+      ),
+      QueuedPacketsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $OfflinkDatabaseManager {
   final _$OfflinkDatabase _db;
@@ -1751,4 +2775,6 @@ class $OfflinkDatabaseManager {
       $$ConversationsTableTableTableManager(_db, _db.conversationsTable);
   $$MessagesTableTableTableManager get messagesTable =>
       $$MessagesTableTableTableManager(_db, _db.messagesTable);
+  $$QueuedPacketsTableTableTableManager get queuedPacketsTable =>
+      $$QueuedPacketsTableTableTableManager(_db, _db.queuedPacketsTable);
 }

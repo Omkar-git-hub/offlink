@@ -7,11 +7,12 @@ import 'package:path_provider/path_provider.dart';
 
 import 'tables/conversations_table.dart';
 import 'tables/messages_table.dart';
+import 'tables/queued_packets_table.dart';
 
 part 'offlink_database.g.dart';
 
 /// Central Drift database for local Offlink persistence.
-@DriftDatabase(tables: [ConversationsTable, MessagesTable])
+@DriftDatabase(tables: [ConversationsTable, MessagesTable, QueuedPacketsTable])
 class OfflinkDatabase extends _$OfflinkDatabase {
   OfflinkDatabase([QueryExecutor? executor])
     : super(executor ?? _openConnection());
@@ -19,7 +20,7 @@ class OfflinkDatabase extends _$OfflinkDatabase {
   OfflinkDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration {
@@ -28,7 +29,9 @@ class OfflinkDatabase extends _$OfflinkDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        // Schema upgrade hooks for future migrations
+        if (from < 2) {
+          await m.createTable(queuedPacketsTable);
+        }
       },
       beforeOpen: (details) async {
         // Enable foreign key support in SQLite

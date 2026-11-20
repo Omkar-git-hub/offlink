@@ -160,6 +160,36 @@ class DirectMessageService implements MessageService {
       return;
     }
 
+    final localNodeId =
+        _identityManager.currentIdentity?.nodeId ?? 'local-node';
+    final ackPacket = OfflinkPacket(
+      messageId: 'ack-${DateTime.now().microsecondsSinceEpoch}',
+      senderNodeId: localNodeId,
+      recipientNodeId: packet.senderNodeId,
+      messageType: OfflinkMessageType.acknowledgement,
+      timestamp: DateTime.now().toUtc(),
+      ttl: 4,
+      payload: packet.messageId,
+    );
+
+    // Idempotent deduplication check:
+    // If this message was already received and persisted, still send the delivery ACK back
+    // so the sender knows it was received, but do NOT increment unreadCount or emit duplicate UI events.
+    if (_messageRepository != null) {
+      final existing = await _messageRepository.getMessageById(
+        packet.messageId,
+      );
+      if (existing != null) {
+        try {
+          await _packetTransport.sendPacket(
+            peerId: packet.senderNodeId,
+            packet: ackPacket,
+          );
+        } catch (_) {}
+        return;
+      }
+    }
+
     final message = ChatMessage(
       id: packet.messageId,
       conversationId: packet.senderNodeId,
@@ -196,18 +226,6 @@ class DirectMessageService implements MessageService {
     }
 
     _incomingMessagesController.add(message);
-
-    final localNodeId =
-        _identityManager.currentIdentity?.nodeId ?? 'local-node';
-    final ackPacket = OfflinkPacket(
-      messageId: 'ack-${DateTime.now().microsecondsSinceEpoch}',
-      senderNodeId: localNodeId,
-      recipientNodeId: packet.senderNodeId,
-      messageType: OfflinkMessageType.acknowledgement,
-      timestamp: DateTime.now().toUtc(),
-      ttl: 4,
-      payload: packet.messageId,
-    );
 
     try {
       await _packetTransport.sendPacket(
@@ -302,7 +320,11 @@ class DirectMessageService implements MessageService {
       );
     }
 
-    await _packetTransport.sendPacket(peerId: peerId, packet: packet);
+    try {
+      await _packetTransport.sendPacket(peerId: peerId, packet: packet);
+    } catch (_) {
+      // Saved in offline message queue; recovery service will retry when connected
+    }
 
     return message;
   }

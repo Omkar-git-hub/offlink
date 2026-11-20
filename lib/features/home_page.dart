@@ -219,6 +219,8 @@ class _HomePageState extends State<HomePage> {
 
       await widget.packetTransport.initializePeer(peer.peerId);
       widget.meshRouter?.addDirectNeighbor(peer.peerId);
+      widget.lifecycleCoordinator?.pendingMessageRecovery
+          .onPeerOrRouteAvailable(peer.peerId);
 
       if (!mounted || _isDisposed) {
         return;

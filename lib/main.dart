@@ -9,6 +9,7 @@ import 'crypto/identity/identity_key_service.dart';
 import 'crypto/session/secure_session_service.dart';
 import 'data/database/drift_conversation_repository.dart';
 import 'data/database/drift_message_repository.dart';
+import 'data/database/drift_store_and_forward_repository.dart';
 import 'data/database/offlink_database.dart';
 import 'data/identity/flutter_secure_identity_storage.dart';
 import 'data/identity/secure_identity_repository.dart';
@@ -23,6 +24,7 @@ import 'domain/mesh/mesh_packet_router.dart';
 import 'domain/messaging/direct_message_service.dart';
 import 'domain/messaging/message_repository.dart';
 import 'domain/messaging/message_service.dart';
+import 'domain/queue/store_and_forward_manager.dart';
 import 'features/home_page.dart';
 import 'features/onboarding/onboarding_page.dart';
 
@@ -70,6 +72,17 @@ Future<void> main() async {
   final database = OfflinkDatabase();
   final messageRepository = DriftMessageRepository(database);
   final conversationRepository = DriftConversationRepository(database);
+  final storeAndForwardRepository = DriftStoreAndForwardRepository(database);
+
+  final storeAndForwardManager = StoreAndForwardManager(
+    repository: storeAndForwardRepository,
+    transport: packetTransport,
+    routingTable: meshPacketRouter.routingTable,
+    getLocalNodeId: () =>
+        identityManager.currentIdentity?.nodeId ?? 'local-node',
+    getConnectedPeerIds: () => packetTransport.connectedPeerIds,
+  );
+  meshPacketRouter.storeAndForwardManager = storeAndForwardManager;
 
   final secureSessionService = SecureSessionService(
     identityKeyService: identityKeyService,
@@ -99,6 +112,7 @@ Future<void> main() async {
     backgroundService: backgroundService,
     connectionRecovery: connectionRecovery,
     pendingMessageRecovery: pendingMessageRecovery,
+    storeAndForwardManager: storeAndForwardManager,
   );
   lifecycleCoordinator.initialize();
 
