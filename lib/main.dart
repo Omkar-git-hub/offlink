@@ -15,6 +15,7 @@ import 'data/database/offlink_database.dart';
 import 'data/identity/flutter_secure_identity_storage.dart';
 import 'data/identity/secure_identity_repository.dart';
 import 'data/lifecycle/method_channel_background_service.dart';
+import 'data/location/geolocator_location_provider.dart';
 import 'domain/group/group_message_service.dart';
 import 'domain/group/group_repository.dart';
 import 'domain/identity/identity_initialization_service.dart';
@@ -23,6 +24,7 @@ import 'domain/lifecycle/app_lifecycle_coordinator.dart';
 import 'domain/lifecycle/app_lifecycle_manager.dart';
 import 'domain/lifecycle/connection_recovery_coordinator.dart';
 import 'domain/lifecycle/pending_message_recovery_service.dart';
+import 'domain/location/location_service.dart';
 import 'domain/mesh/mesh_packet_router.dart';
 import 'domain/messaging/direct_message_service.dart';
 import 'domain/messaging/message_repository.dart';
@@ -111,6 +113,17 @@ Future<void> main() async {
     secureSessionService: secureSessionService,
   );
 
+  final locationProvider = const GeolocatorLocationProvider();
+  final locationService = LocationService(
+    locationProvider: locationProvider,
+    packetTransport: meshPacketRouter,
+    identityManager: identityManager,
+    secureSessionService: secureSessionService,
+    messageRepository: messageRepository,
+    conversationRepository: conversationRepository,
+    groupRepository: groupRepository,
+  );
+
   final backgroundService = MethodChannelBackgroundService();
   final lifecycleManager = AppLifecycleManager();
   final connectionRecovery = ConnectionRecoveryCoordinator(
@@ -142,6 +155,7 @@ Future<void> main() async {
       messageRepository: messageRepository,
       groupMessageService: groupMessageService,
       groupRepository: groupRepository,
+      locationService: locationService,
       database: database,
     ),
   );
@@ -161,6 +175,7 @@ class OfflinkApp extends StatefulWidget {
     this.messageRepository,
     this.groupMessageService,
     this.groupRepository,
+    this.locationService,
     this.database,
   });
 
@@ -175,6 +190,7 @@ class OfflinkApp extends StatefulWidget {
   final MessageRepository? messageRepository;
   final GroupMessageService? groupMessageService;
   final GroupRepository? groupRepository;
+  final LocationService? locationService;
   final OfflinkDatabase? database;
 
   @override
@@ -205,6 +221,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
   @override
   void dispose() {
     widget.lifecycleCoordinator?.dispose();
+    widget.locationService?.dispose();
     widget.groupMessageService?.dispose();
     widget.messageService.dispose();
     widget.meshRouter?.dispose();
@@ -235,6 +252,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
               messageRepository: widget.messageRepository,
               groupMessageService: widget.groupMessageService,
               groupRepository: widget.groupRepository,
+              locationService: widget.locationService,
             )
           : OnboardingPage(onContinue: _createIdentity),
     );

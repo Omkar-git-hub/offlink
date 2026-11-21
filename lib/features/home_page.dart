@@ -17,6 +17,7 @@ import '../domain/lifecycle/connection_recovery_coordinator.dart';
 import '../domain/mesh/mesh_packet_router.dart';
 import '../domain/messaging/message_repository.dart';
 import '../domain/messaging/message_service.dart';
+import '../domain/location/location_service.dart';
 import '../domain/protocol/offlink_message_type.dart';
 import '../domain/protocol/offlink_packet.dart';
 import 'chat/chat_page.dart';
@@ -35,6 +36,7 @@ class HomePage extends StatefulWidget {
     this.messageRepository,
     this.groupMessageService,
     this.groupRepository,
+    this.locationService,
   });
 
   final PhoneBleConnection bleConnection;
@@ -47,6 +49,7 @@ class HomePage extends StatefulWidget {
   final MessageRepository? messageRepository;
   final GroupMessageService? groupMessageService;
   final GroupRepository? groupRepository;
+  final LocationService? locationService;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -309,6 +312,7 @@ class _HomePageState extends State<HomePage> {
           peer: peer,
           messageService: messageService,
           messageRepository: widget.messageRepository,
+          locationService: widget.locationService,
           isConnected: _connectedPeerIds.contains(peer.peerId),
         ),
       ),
@@ -330,6 +334,7 @@ class _HomePageState extends State<HomePage> {
           groupMessageService: widget.groupMessageService!,
           groupRepository: widget.groupRepository!,
           messageRepository: widget.messageRepository,
+          locationService: widget.locationService,
           localNodeId: localNodeId,
         ),
       ),

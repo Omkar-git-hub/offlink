@@ -1,36 +1,31 @@
 # AI Progress & Execution Checkpoint
 
 ## Current Module & Feature Branch
-- **Module**: Module 8 — Group Messaging
-- **Branch**: `feature/group-messaging`
+- **Module**: Module 9 — Location Sharing: Privacy-Preserving Offline Location Communication
+- **Branch**: `feature/location-sharing`
 - **Target**: `main`
 
 ## Objective & Acceptance Criteria
-- Group Creation, Naming & Local Persistence:
-  - Added `GroupsTable` and `GroupMembersTable` in Drift schema v3 with automatic SQLite cascade deletion.
-  - Implemented `Group` and `GroupMember` domain entities and `GroupRepository` contract.
-  - Implemented `DriftGroupRepository` providing atomic group creation, member listing, member addition/removal, and metadata updates.
-- Group Protocol & Pairwise Session Fanout:
-  - Added `OfflinkMessageType.groupMessage` and `OfflinkMessageType.groupMembership`.
-  - Implemented `GroupMessagePayload` and `GroupMembershipPayload` for JSON wire serialization.
-  - Implemented `GroupMessageService` managing group creation, member invites, member additions/removals, message fanout, reverse-path ACKs, and delivery tracking.
-  - Multi-Hop Relay Privacy: Each group message is encrypted under the recipient member's pairwise session key (`SecureSessionService` via X25519 + AES-256-GCM AEAD). Intermediate relays route ciphertext packets without decrypting or having access to group plaintext or member lists.
-- Security & Revocation Secrecy:
-  - Zero-Plaintext Enforcement: Rejects unencrypted transmission when a cryptographic session service is configured; fails individual member delivery rather than leaking plaintext over the air.
-  - Authorization Verification: Envelope sender must match inner payload sender. Only authorized members can send to a group. Only group admins can add or remove members.
-  - Cryptographic Revocation Secrecy: Removed members are immediately excluded from future message fanouts. Because packets are encrypted with pairwise keys, removed members cannot decrypt future group messages even if acting as intermediate relays.
-- Delivery Status Tracking & Delay-Tolerant Store-and-Forward:
-  - Per-member delivery tracking: ACKs correlate to individual member packets, updating per-member statuses. Group message transitions to `delivered` when all active members ACK.
-  - Delay-Tolerant Store-and-Forward Compatibility: Offline group members have packets stored in relay `StoreAndForwardManager` queues and automatically flushed upon reconnection.
-- Presentation & UX:
-  - Implemented `GroupChatPage` displaying group header, member count, member modal sheet with admin add/remove controls, delivery status icons, and outgoing message bubbles.
-  - Updated `HomePage` with a dedicated Groups section and interactive group creation dialog.
-  - Wired `GroupMessageService` and `DriftGroupRepository` into `main.dart`.
+- Offline-First, Privacy-Preserving Location Sharing:
+  - Added `OfflinkMessageType.location` (`'loc'`).
+  - Created `PositionData` domain entity and `LocationPayload` wire/persistence model with boundary validation (-90..90, -180..180).
+  - Created `LocationProvider` domain interface and `GeolocatorLocationProvider` platform implementation wrapping `package:geolocator`.
+  - Implemented `LocationService` managing one-time location snapshots, periodic live tracking sessions, expiration timers, and lifecycle-aware throttling.
+- Security, Relay Privacy & Zero-Plaintext Enforcement:
+  - Pairwise E2E Encryption: All location messages are encrypted under recipient pairwise session keys via `SecureSessionService` (X25519 + AES-256-GCM AEAD). Plaintext transmission is strictly rejected.
+  - Multi-Hop Relay Privacy: Intermediate mesh relays route ciphertext packets only without decrypting or logging coordinates. Verified via multi-hop mesh and DTN store-and-forward integration tests.
+  - Authorization Verification: Envelope sender must match inner payload sender. Group locations verify that both sender and local receiver are authorized group members. Expired packets are rejected.
+  - Retention & Data Minimization: No separate location history or GPS track logging table. Live location messages reuse a single message ID (`loc-live-${liveSessionId}`) and update existing records in-place.
+- User Controls & Presentation:
+  - Implemented `LocationBubble` widget displaying formatted coordinates (5 decimals), accuracy radius (±m), LIVE status indicator, and a modal details dialog with offline coordinate copy.
+  - Implemented `LocationSharingSheet` modal sheet providing transparent recipient disclosure, permission warnings, one-time snapshot trigger, duration selector (15m, 30m, 60m), and active live sharing stop button.
+  - Integrated location sharing controls into `ChatPage`, `GroupChatPage`, `HomePage`, and `main.dart`.
 - Verification Suite:
-  - Comprehensive unit, integration, and widget tests (239/239 tests passing across entire repository).
-  - `dart format`: PASS (0 differences across 141 files).
+  - Comprehensive unit, integration, and widget tests (272/272 tests passing across entire repository).
+  - `dart format`: PASS (0 differences across 154 files).
   - `flutter analyze`: PASS (0 issues found).
-  - `flutter test`: PASS (239/239 tests passing, 17 new tests added for Module 8).
+  - `flutter test`: PASS (272/272 tests passing, 33 new tests added for Module 9).
+  - `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built successfully).
 
 ## Status
 - **Status**: READY FOR PR / MERGE REVIEW
@@ -43,37 +38,38 @@
 5. **Module 5 Merged into main**: PR #16 merged (`8c59131`).
 6. **Module 6 Merged into main**: PR #17 merged (`9729972`).
 7. **Module 7 Merged into main**: PR #18 merged (`93fe8f4`).
-8. **Module 8 Group Messaging**:
-   - Added `GroupsTable` (`lib/data/database/tables/groups_table.dart`) and `GroupMembersTable` (`lib/data/database/tables/group_members_table.dart`).
-   - Upgraded `OfflinkDatabase` to `schemaVersion: 3` with migration logic and regenerated Drift code.
-   - Created `Group` entity (`lib/domain/group/group.dart`) and `GroupMember` entity (`lib/domain/group/group_member.dart`).
-   - Created `GroupRepository` contract (`lib/domain/group/group_repository.dart`) and `DriftGroupRepository` implementation (`lib/data/database/drift_group_repository.dart`).
-   - Extended `OfflinkMessageType` with `groupMessage` and `groupMembership`.
-   - Created `GroupMessagePayload` and `GroupMembershipPayload`.
-   - Implemented `GroupMessageService` (`lib/domain/group/group_message_service.dart`) with pairwise encrypted fanout, authorization enforcement, and per-member delivery tracking.
-   - Implemented `GroupChatPage` (`lib/features/chat/group_chat_page.dart`) with member management sheet and delivery indicators.
-   - Updated `HomePage` and `main.dart` with group chat and repository injection.
-   - Added unit tests for group repository, group messaging service, 4-node multi-hop mesh integration, database schema v3, and group chat widget.
-8. **Architectural Decisions Recorded**:
-   - Recorded `DECISION-009` in `docs/development/AI_DECISIONS.md`.
+8. **Module 8 Merged into main**: PR #19 merged (`81c3ee8`).
+9. **Module 9 Location Sharing**:
+   - Extended `OfflinkMessageType` with `location` (`'loc'`) and updated `OfflinkMessageTypeCodec`.
+   - Created `PositionData` (`lib/domain/location/position_data.dart`).
+   - Created `LocationPayload` (`lib/domain/location/location_payload.dart`) with `LocationSharingType` (`oneTime`, `liveUpdate`, `liveStop`), wire encoding/decoding, and boundary validation.
+   - Created `LocationProvider` interface (`lib/domain/location/location_provider.dart`) and `GeolocatorLocationProvider` (`lib/data/location/geolocator_location_provider.dart`).
+   - Created `LiveLocationSession` domain entity (`lib/domain/location/live_location_session.dart`).
+   - Implemented `LocationService` (`lib/domain/location/location_service.dart`) with snapshot, live tracking, in-place message upsert, pairwise session encryption, group fanout, envelope-sender validation, group authorization, reverse-path ACKs, auto-expiration, and background throttling.
+   - Filtered location messages in `DirectMessageService` to prevent double-processing.
+   - Implemented `LocationBubble` (`lib/features/location/location_bubble.dart`) and `LocationSharingSheet` (`lib/features/location/location_sharing_sheet.dart`).
+   - Integrated into `ChatPage`, `GroupChatPage`, `HomePage`, and `main.dart`.
+   - Added unit tests for location payload, location service, 3-node multi-hop mesh and DTN store-and-forward relay integration, and widget tests for location bubble and sharing sheet.
+10. **Architectural Decisions Recorded**:
+    - Recorded `DECISION-011` in `docs/development/AI_DECISIONS.md`.
 
 ## Tests Run & Results
-- `dart format --output=none --set-exit-if-changed .`: PASS (0 differences across 127 files)
+- `dart format --output=none --set-exit-if-changed .`: PASS (0 differences across 154 files)
 - `flutter analyze`: PASS (0 issues found)
-- `flutter test`: PASS (222/222 tests passing, 14 new tests added for Module 7)
-  - `test/unit/database/offlink_database_test.dart` (3 tests)
-  - `test/unit/queue/drift_store_and_forward_repository_test.dart` (5 tests)
-  - `test/unit/queue/store_and_forward_manager_test.dart` (5 tests)
-  - `test/unit/messaging/direct_message_service_offline_test.dart` (2 tests)
-  - `test/unit/queue/store_and_forward_integration_test.dart` (1 test: full 3-node DTN store-and-forward simulation)
-  - All existing 208 unit, widget, and lifecycle tests passing.
-- `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built in 123.3s)
+- `flutter test`: PASS (272/272 tests passing, 33 new tests added for Module 9)
+  - `test/unit/location/location_payload_test.dart` (8 tests)
+  - `test/unit/location/location_service_test.dart` (12 tests)
+  - `test/unit/location/location_mesh_integration_test.dart` (2 tests: 3-node multi-hop mesh and DTN store-and-forward)
+  - `test/widget/location/location_bubble_test.dart` (4 tests)
+  - `test/widget/location/location_sharing_sheet_test.dart` (7 tests)
+  - All existing 239 unit, widget, and lifecycle tests passing.
+- `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built in 118.8s)
 
 ## Known Failures & Unresolved Issues
 - None.
 
 ## Exact Next Action
-1. Stage and commit changes to `feature/offline-queue-store-forward`.
+1. Stage and commit changes to `feature/location-sharing`.
 2. Push branch to GitHub.
 3. Open pull request targeting `main`.
 4. Monitor CI workflow run.
