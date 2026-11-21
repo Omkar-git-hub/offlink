@@ -6,8 +6,13 @@ import '../../domain/group/group.dart';
 import '../../domain/group/group_member.dart';
 import '../../domain/group/group_message_service.dart';
 import '../../domain/group/group_repository.dart';
+import '../../domain/location/live_location_session.dart';
+import '../../domain/location/location_payload.dart';
+import '../../domain/location/location_service.dart';
 import '../../domain/messaging/chat_message.dart';
 import '../../domain/messaging/message_repository.dart';
+import '../location/location_bubble.dart';
+import '../location/location_sharing_sheet.dart';
 
 class GroupChatPage extends StatefulWidget {
   const GroupChatPage({
@@ -16,6 +21,7 @@ class GroupChatPage extends StatefulWidget {
     required this.groupMessageService,
     required this.groupRepository,
     this.messageRepository,
+    this.locationService,
     required this.localNodeId,
   });
 
@@ -23,6 +29,7 @@ class GroupChatPage extends StatefulWidget {
   final GroupMessageService groupMessageService;
   final GroupRepository groupRepository;
   final MessageRepository? messageRepository;
+  final LocationService? locationService;
   final String localNodeId;
 
   @override
@@ -35,6 +42,8 @@ class _GroupChatPageState extends State<GroupChatPage> {
   final List<ChatMessage> _messages = [];
 
   StreamSubscription<ChatMessage>? _messageSubscription;
+  StreamSubscription<ChatMessage>? _locationSubscription;
+  StreamSubscription<List<LiveLocationSession>>? _activeSessionsSubscription;
   List<GroupMember> _members = [];
   bool _isSending = false;
 
@@ -44,6 +53,16 @@ class _GroupChatPageState extends State<GroupChatPage> {
 
     _messageSubscription = widget.groupMessageService.incomingGroupMessages
         .listen(_handleIncomingMessage);
+
+    if (widget.locationService != null) {
+      _locationSubscription = widget.locationService!.locationMessages.listen(
+        _handleLocationMessage,
+      );
+      _activeSessionsSubscription = widget.locationService!.activeSessionsStream
+          .listen((_) {
+            if (mounted) setState(() {});
+          });
+    }
 
     _loadMembers();
     widget.groupMessageService.initiateSecureSessionsForGroup(widget.group.id);
@@ -88,6 +107,22 @@ class _GroupChatPageState extends State<GroupChatPage> {
         if (!_messages.any((m) => m.id == message.id)) {
           _messages.add(message);
         }
+      });
+      _scrollToBottom();
+    }
+  }
+
+  void _handleLocationMessage(ChatMessage message) {
+    if (message.conversationId == 'group-${widget.group.id}' ||
+        message.recipientNodeId == widget.group.id) {
+      setState(() {
+        final existingIndex = _messages.indexWhere((m) => m.id == message.id);
+        if (existingIndex >= 0) {
+          _messages[existingIndex] = message;
+        } else {
+          _messages.add(message);
+        }
+        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
       });
       _scrollToBottom();
     }
@@ -363,9 +398,56 @@ class _GroupChatPageState extends State<GroupChatPage> {
   @override
   void dispose() {
     _messageSubscription?.cancel();
+    _locationSubscription?.cancel();
+    _activeSessionsSubscription?.cancel();
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Widget _buildLiveSharingBanner() {
+    final session = widget.locationService?.getActiveLiveSession(
+      widget.group.id,
+    );
+    final remainingMinutes = session?.remainingTime().inMinutes ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.green.withValues(alpha: 0.15),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Colors.green,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Sharing live location with group (~$remainingMinutes min remaining)',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: () {
+              widget.locationService?.stopLiveLocation(widget.group.id);
+            },
+            child: const Text(
+              'Stop',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -398,6 +480,9 @@ class _GroupChatPageState extends State<GroupChatPage> {
       ),
       body: Column(
         children: [
+          if (widget.locationService?.isLiveLocationActive(widget.group.id) ==
+              true)
+            _buildLiveSharingBanner(),
           Expanded(
             child: _messages.isEmpty
                 ? Center(
@@ -428,6 +513,13 @@ class _GroupChatPageState extends State<GroupChatPage> {
   }
 
   Widget _buildMessageBubble(ChatMessage message) {
+    if (LocationPayload.isLocationMessage(message.content)) {
+      try {
+        final payload = LocationPayload.decode(message.content);
+        return LocationBubble(message: message, payload: payload);
+      } catch (_) {}
+    }
+
     final isOutgoing = message.isOutgoing;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -532,6 +624,24 @@ class _GroupChatPageState extends State<GroupChatPage> {
       child: SafeArea(
         child: Row(
           children: [
+            if (widget.locationService != null) ...[
+              IconButton(
+                icon: const Icon(Icons.location_on_outlined),
+                tooltip: 'Share Location',
+                color: Theme.of(context).colorScheme.primary,
+                onPressed: () {
+                  LocationSharingSheet.show(
+                    context: context,
+                    locationService: widget.locationService!,
+                    targetId: widget.group.id,
+                    targetName: widget.group.name,
+                    isGroup: true,
+                    memberCount: _members.length,
+                  );
+                },
+              ),
+              const SizedBox(width: 4),
+            ],
             Expanded(
               child: TextField(
                 controller: _textController,

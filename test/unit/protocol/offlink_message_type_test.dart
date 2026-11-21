@@ -10,6 +10,9 @@ void main() {
         OfflinkMessageType.encrypted: 'enc',
         OfflinkMessageType.handshakeInit: 'handshake_init',
         OfflinkMessageType.handshakeResponse: 'handshake_resp',
+        OfflinkMessageType.groupMessage: 'group_msg',
+        OfflinkMessageType.groupMembership: 'group_member',
+        OfflinkMessageType.location: 'loc',
       };
 
       for (final entry in expectations.entries) {
