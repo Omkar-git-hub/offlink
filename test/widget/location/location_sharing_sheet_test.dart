@@ -258,6 +258,8 @@ void main() {
 
         expect(find.text('Live Location is Active'), findsOneWidget);
         expect(find.text('Stop Live Sharing'), findsOneWidget);
+
+        await locationService.stopLiveLocation('node-alice');
       },
     );
   });

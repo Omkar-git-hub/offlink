@@ -49,15 +49,30 @@ class StoreAndForwardManager {
 
   Timer? _periodicTimer;
   bool _isProcessing = false;
+  bool _isStarted = false;
+
+  /// Whether the periodic maintenance/flush timer is actively running.
+  bool get isPeriodicTimerRunning => _periodicTimer != null;
 
   void start() {
+    _isStarted = true;
+    processStoreAndForward();
+  }
+
+  void stop() {
+    _isStarted = false;
     _periodicTimer?.cancel();
+    _periodicTimer = null;
+  }
+
+  void _ensurePeriodicTimerRunning() {
+    if (_periodicTimer != null || !_isStarted) return;
     _periodicTimer = Timer.periodic(checkInterval, (_) {
       processStoreAndForward();
     });
   }
 
-  void stop() {
+  void _suspendPeriodicTimer() {
     _periodicTimer?.cancel();
     _periodicTimer = null;
   }
@@ -102,17 +117,31 @@ class StoreAndForwardManager {
     );
 
     await _repository.enqueuePacket(queuedPacket);
+    if (_isStarted) {
+      _ensurePeriodicTimerRunning();
+    }
     return true;
   }
 
   /// Removes a stored packet when an ACK is observed on the mesh.
   Future<void> onAckReceived(String ackMessageId) async {
     await _repository.removePacket(ackMessageId);
+    final remaining = await _repository.getQueueSize();
+    if (remaining == 0) {
+      _suspendPeriodicTimer();
+    }
   }
 
   /// Triggered opportunistically when a peer connects or a new route is learned.
   Future<int> onPeerOrRouteAvailable(String peerId) async {
-    return await flushEligiblePackets(targetPeerId: peerId);
+    final count = await flushEligiblePackets(targetPeerId: peerId);
+    final remaining = await _repository.getQueueSize();
+    if (remaining == 0) {
+      _suspendPeriodicTimer();
+    } else if (_isStarted) {
+      _ensurePeriodicTimerRunning();
+    }
+    return count;
   }
 
   /// Flushes eligible packets to available next-hops or connected peers.
@@ -214,6 +243,12 @@ class StoreAndForwardManager {
       maxQueueSize: maxQueueSize,
     );
     await flushEligiblePackets();
+    final remaining = await _repository.getQueueSize();
+    if (remaining == 0) {
+      _suspendPeriodicTimer();
+    } else if (_isStarted) {
+      _ensurePeriodicTimerRunning();
+    }
   }
 
   Duration _calculateBackoffWithJitter(int attempt) {

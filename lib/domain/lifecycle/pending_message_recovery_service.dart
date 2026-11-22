@@ -45,20 +45,43 @@ class PendingMessageRecoveryService {
   final Map<String, int> _retryCounts = <String, int>{};
   final Map<String, DateTime> _nextAttemptAt = <String, DateTime>{};
   Timer? _periodicTimer;
+  bool _isStarted = false;
   bool _isProcessing = false;
+
+  /// Whether the periodic recovery timer is actively polling.
+  bool get isPeriodicTimerRunning => _periodicTimer != null;
 
   int getRetryCount(String messageId) => _retryCounts[messageId] ?? 0;
 
   DateTime? getNextAttemptAt(String messageId) => _nextAttemptAt[messageId];
 
   void start() {
+    _isStarted = true;
+    processPendingMessages();
+  }
+
+  void stop() {
+    _isStarted = false;
     _periodicTimer?.cancel();
+    _periodicTimer = null;
+  }
+
+  /// Signals that an outgoing message was queued or failed delivery,
+  /// ensuring the retry timer is active if currently suspended.
+  void notifyPendingMessageQueued() {
+    if (_isStarted) {
+      _ensurePeriodicTimerRunning();
+    }
+  }
+
+  void _ensurePeriodicTimerRunning() {
+    if (_periodicTimer != null || !_isStarted) return;
     _periodicTimer = Timer.periodic(checkInterval, (_) {
       processPendingMessages();
     });
   }
 
-  void stop() {
+  void _suspendPeriodicTimer() {
     _periodicTimer?.cancel();
     _periodicTimer = null;
   }
@@ -66,7 +89,13 @@ class PendingMessageRecoveryService {
   /// Triggers an immediate retry flush for unacknowledged messages
   /// targeting a newly connected or discovered [recipientNodeId].
   Future<int> onPeerOrRouteAvailable(String recipientNodeId) async {
-    return await processPendingMessages(targetRecipientNodeId: recipientNodeId);
+    final count = await processPendingMessages(
+      targetRecipientNodeId: recipientNodeId,
+    );
+    if (count > 0 || _retryCounts.isNotEmpty) {
+      _ensurePeriodicTimerRunning();
+    }
+    return count;
   }
 
   /// Scans and retries pending unacknowledged outgoing messages.
@@ -83,6 +112,13 @@ class PendingMessageRecoveryService {
       final pending = await _messageRepository.getPendingMessages(
         limit: maxQueueSize,
       );
+
+      if (pending.isEmpty) {
+        _suspendPeriodicTimer();
+        return 0;
+      } else {
+        _ensurePeriodicTimerRunning();
+      }
       final now = DateTime.now().toUtc();
 
       for (final message in pending) {

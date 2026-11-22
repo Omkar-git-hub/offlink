@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../bluetooth/adaptive_ble_discovery.dart';
 import '../bluetooth/ble_discovery_event.dart';
 import '../bluetooth/ble_models.dart';
 import '../bluetooth/ble_packet_transport.dart';
+import '../bluetooth/discovery.dart';
 import '../bluetooth/phone_ble_connection.dart';
 import '../bluetooth/phone_ble_discovery.dart';
+import '../domain/battery/adaptive_power_coordinator.dart';
 import '../domain/group/group.dart';
 import '../domain/group/group_member.dart';
 import '../domain/group/group_message_service.dart';
@@ -29,8 +32,10 @@ class HomePage extends StatefulWidget {
     required this.bleConnection,
     required this.packetTransport,
     this.meshRouter,
+    this.discovery,
     this.lifecycleCoordinator,
     this.connectionRecovery,
+    this.powerCoordinator,
     this.identityManager,
     this.messageService,
     this.messageRepository,
@@ -42,8 +47,10 @@ class HomePage extends StatefulWidget {
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
   final MeshPacketRouter? meshRouter;
+  final BleDiscovery? discovery;
   final AppLifecycleCoordinator? lifecycleCoordinator;
   final ConnectionRecoveryCoordinator? connectionRecovery;
+  final AdaptivePowerCoordinator? powerCoordinator;
   final IdentityManager? identityManager;
   final MessageService? messageService;
   final MessageRepository? messageRepository;
@@ -56,7 +63,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late final PhoneBleDiscovery _discovery;
+  late final BleDiscovery _discovery;
 
   StreamSubscription<BleDiscoveryEvent>? _discoverySubscription;
   StreamSubscription<dynamic>? _connectionSubscription;
@@ -81,7 +88,7 @@ class _HomePageState extends State<HomePage> {
 
     widget.lifecycleCoordinator?.initialize();
 
-    _discovery = PhoneBleDiscovery();
+    _discovery = widget.discovery ?? PhoneBleDiscovery();
 
     _discoverySubscription = _discovery.discoveryEvents.listen(
       _handleDiscoveryEvent,
@@ -524,11 +531,15 @@ class _HomePageState extends State<HomePage> {
     }
 
     setState(() {
-      _nearbyPeers.clear();
       _errorMessage = null;
     });
 
-    await Future<void>.delayed(Duration.zero);
+    final discovery = _discovery;
+    if (discovery is AdaptiveBleDiscovery) {
+      await discovery.triggerImmediateScan();
+    } else {
+      await discovery.completeScanCycle();
+    }
   }
 
   @override
@@ -539,7 +550,14 @@ class _HomePageState extends State<HomePage> {
     _connectionSubscription?.cancel();
     _incomingPacketSubscription?.cancel();
 
-    _discovery.dispose();
+    if (widget.discovery == null) {
+      final discovery = _discovery;
+      if (discovery is PhoneBleDiscovery) {
+        discovery.dispose();
+      } else if (discovery is AdaptiveBleDiscovery) {
+        discovery.dispose();
+      }
+    }
 
     super.dispose();
   }

@@ -40,7 +40,6 @@ class LocationService {
     _subscription = _packetTransport.incomingPackets.listen(
       _handleIncomingPacket,
     );
-    _startPeriodicTimer();
   }
 
   final LocationProvider _locationProvider;
@@ -93,6 +92,10 @@ class LocationService {
   /// List of active outgoing live sessions.
   List<LiveLocationSession> get activeLiveSessions =>
       List.unmodifiable(_activeLiveSessions.values.toList());
+
+  /// Whether there is at least one active, unexpired outgoing live location session.
+  bool get hasActiveLiveSessions =>
+      _activeLiveSessions.values.any((s) => !s.isExpired());
 
   /// Checks whether location hardware/services are enabled.
   Future<bool> isLocationServiceEnabled() =>
@@ -222,6 +225,7 @@ class LocationService {
 
     _activeLiveSessions[targetId] = session;
     _activeSessionsStreamController.add(activeLiveSessions);
+    _ensurePeriodicTimerRunning();
 
     // Send initial update
     await _sendLiveUpdateForSession(session, position, now);
@@ -240,6 +244,9 @@ class LocationService {
     }
 
     _activeSessionsStreamController.add(activeLiveSessions);
+    if (_activeLiveSessions.isEmpty) {
+      _stopPeriodicTimer();
+    }
 
     if (sendStopPacket) {
       final localNodeId =
@@ -384,8 +391,12 @@ class LocationService {
     );
   }
 
-  void _startPeriodicTimer() {
-    _periodicTimer?.cancel();
+  /// Whether the periodic GPS update timer is actively running.
+  bool get isPeriodicTimerRunning => _periodicTimer != null;
+
+  void _ensurePeriodicTimerRunning() {
+    if (_periodicTimer != null || _activeLiveSessions.isEmpty) return;
+
     _periodicTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
       final now = DateTime.now().toUtc();
       final expiredKeys = <String>[];
@@ -416,7 +427,16 @@ class LocationService {
       for (final key in expiredKeys) {
         await stopLiveLocation(key, sendStopPacket: true);
       }
+
+      if (_activeLiveSessions.isEmpty) {
+        _stopPeriodicTimer();
+      }
     });
+  }
+
+  void _stopPeriodicTimer() {
+    _periodicTimer?.cancel();
+    _periodicTimer = null;
   }
 
   Future<void> _sendDirectLocationPayload({
