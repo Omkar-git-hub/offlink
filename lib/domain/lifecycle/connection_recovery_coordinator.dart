@@ -40,8 +40,16 @@ class ConnectionRecoveryCoordinator {
     this.initialDelay = const Duration(seconds: 1),
     this.maxDelay = const Duration(seconds: 30),
     this.backoffMultiplier = 2.0,
+    Duration? minAttemptSpacing,
+    this.backgroundMaxAttempts = 3,
+    this.backgroundInitialDelay = const Duration(seconds: 5),
     Random? random,
   }) : _connection = connection,
+       minAttemptSpacing =
+           minAttemptSpacing ??
+           (initialDelay < const Duration(milliseconds: 100)
+               ? Duration.zero
+               : const Duration(milliseconds: 500)),
        _random = random ?? Random();
 
   final BleConnection _connection;
@@ -49,6 +57,9 @@ class ConnectionRecoveryCoordinator {
   final Duration initialDelay;
   final Duration maxDelay;
   final double backoffMultiplier;
+  final Duration minAttemptSpacing;
+  final int backgroundMaxAttempts;
+  final Duration backgroundInitialDelay;
   final Random _random;
 
   final Map<String, BlePeer> _trackedPeers = <String, BlePeer>{};
@@ -57,6 +68,14 @@ class ConnectionRecoveryCoordinator {
   final Set<String> _inFlightConnects = <String>{};
 
   bool _isBluetoothEnabled = true;
+  bool _isBackgrounded = false;
+  DateTime? _lastAttemptTimestamp;
+
+  bool get isBackgrounded => _isBackgrounded;
+
+  void setBackgroundState(bool isBackgrounded) {
+    _isBackgrounded = isBackgrounded;
+  }
 
   final StreamController<RecoveryEvent> _eventController =
       StreamController<RecoveryEvent>.broadcast();
@@ -107,8 +126,11 @@ class ConnectionRecoveryCoordinator {
       return;
     }
 
+    final effectiveMaxAttempts = _isBackgrounded
+        ? backgroundMaxAttempts
+        : maxAttempts;
     final currentAttempt = (_attempts[peer.peerId] ?? 0) + 1;
-    if (currentAttempt > maxAttempts) {
+    if (currentAttempt > effectiveMaxAttempts) {
       _eventController.add(
         RecoveryEvent(
           peerId: peer.peerId,
@@ -121,9 +143,13 @@ class ConnectionRecoveryCoordinator {
 
     _attempts[peer.peerId] = currentAttempt;
 
-    // Exponential backoff: initialDelay * (backoffMultiplier ^ (attempt - 1)) + jitter
+    final effectiveInitialDelay = _isBackgrounded
+        ? backgroundInitialDelay
+        : initialDelay;
+    // Exponential backoff: effectiveInitialDelay * (backoffMultiplier ^ (attempt - 1)) + jitter
     final exponent = pow(backoffMultiplier, currentAttempt - 1).toDouble();
-    final baseMillis = (initialDelay.inMilliseconds * exponent).toInt();
+    final baseMillis = (effectiveInitialDelay.inMilliseconds * exponent)
+        .toInt();
     final cappedMillis = min(baseMillis, maxDelay.inMilliseconds);
     // Add 10% random jitter to avoid synchronization storms
     final jitter = _random.nextInt(max(1, (cappedMillis * 0.1).toInt()));
@@ -147,6 +173,19 @@ class ConnectionRecoveryCoordinator {
     if (!_trackedPeers.containsKey(peer.peerId) || !_isBluetoothEnabled) {
       return;
     }
+
+    // Ensure minimum spacing between successive connection attempts across peers
+    if (minAttemptSpacing > Duration.zero && _lastAttemptTimestamp != null) {
+      final elapsed = DateTime.now().difference(_lastAttemptTimestamp!);
+      if (elapsed < minAttemptSpacing) {
+        final waitDuration = minAttemptSpacing - elapsed;
+        await Future<void>.delayed(waitDuration);
+        if (!_trackedPeers.containsKey(peer.peerId) || !_isBluetoothEnabled) {
+          return;
+        }
+      }
+    }
+    _lastAttemptTimestamp = DateTime.now();
 
     _inFlightConnects.add(peer.peerId);
     _eventController.add(

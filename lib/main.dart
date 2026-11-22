@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import 'bluetooth/adaptive_ble_discovery.dart';
 import 'bluetooth/ble_packet_transport.dart';
 import 'bluetooth/ble_peripheral_packet_channel.dart';
 import 'bluetooth/flutter_blue_plus_device_connection.dart';
 import 'bluetooth/phone_ble_connection.dart';
+import 'bluetooth/phone_ble_discovery.dart';
 import 'core/identity/node_id_generator.dart';
 import 'crypto/identity/identity_key_service.dart';
 import 'crypto/session/secure_session_service.dart';
@@ -16,6 +18,7 @@ import 'data/identity/flutter_secure_identity_storage.dart';
 import 'data/identity/secure_identity_repository.dart';
 import 'data/lifecycle/method_channel_background_service.dart';
 import 'data/location/geolocator_location_provider.dart';
+import 'domain/battery/adaptive_power_coordinator.dart';
 import 'domain/group/group_message_service.dart';
 import 'domain/group/group_repository.dart';
 import 'domain/identity/identity_initialization_service.dart';
@@ -126,6 +129,16 @@ Future<void> main() async {
 
   final backgroundService = MethodChannelBackgroundService();
   final lifecycleManager = AppLifecycleManager();
+  final phoneDiscovery = PhoneBleDiscovery();
+  final adaptiveDiscovery = AdaptiveBleDiscovery(underlying: phoneDiscovery);
+
+  final powerCoordinator = AdaptivePowerCoordinator(
+    lifecycleManager: lifecycleManager,
+    discovery: adaptiveDiscovery,
+    getConnectedPeerIds: () => packetTransport.connectedPeerIds,
+    hasActiveLiveLocation: () => locationService.hasActiveLiveSessions,
+  );
+
   final connectionRecovery = ConnectionRecoveryCoordinator(
     connection: bleConnection,
   );
@@ -139,6 +152,8 @@ Future<void> main() async {
     connectionRecovery: connectionRecovery,
     pendingMessageRecovery: pendingMessageRecovery,
     storeAndForwardManager: storeAndForwardManager,
+    discovery: adaptiveDiscovery,
+    powerCoordinator: powerCoordinator,
   );
   lifecycleCoordinator.initialize();
 
@@ -149,6 +164,9 @@ Future<void> main() async {
       bleConnection: bleConnection,
       packetTransport: packetTransport,
       meshRouter: meshPacketRouter,
+      discovery: adaptiveDiscovery,
+      phoneDiscovery: phoneDiscovery,
+      powerCoordinator: powerCoordinator,
       lifecycleCoordinator: lifecycleCoordinator,
       connectionRecovery: connectionRecovery,
       messageService: messageService,
@@ -169,6 +187,9 @@ class OfflinkApp extends StatefulWidget {
     required this.bleConnection,
     required this.packetTransport,
     this.meshRouter,
+    this.discovery,
+    this.phoneDiscovery,
+    this.powerCoordinator,
     this.lifecycleCoordinator,
     this.connectionRecovery,
     required this.messageService,
@@ -184,6 +205,9 @@ class OfflinkApp extends StatefulWidget {
   final PhoneBleConnection bleConnection;
   final BlePacketTransport packetTransport;
   final MeshPacketRouter? meshRouter;
+  final AdaptiveBleDiscovery? discovery;
+  final PhoneBleDiscovery? phoneDiscovery;
+  final AdaptivePowerCoordinator? powerCoordinator;
   final AppLifecycleCoordinator? lifecycleCoordinator;
   final ConnectionRecoveryCoordinator? connectionRecovery;
   final MessageService messageService;
@@ -221,6 +245,9 @@ class _OfflinkAppState extends State<OfflinkApp> {
   @override
   void dispose() {
     widget.lifecycleCoordinator?.dispose();
+    widget.powerCoordinator?.dispose();
+    widget.discovery?.dispose();
+    widget.phoneDiscovery?.dispose();
     widget.locationService?.dispose();
     widget.groupMessageService?.dispose();
     widget.messageService.dispose();
@@ -245,6 +272,8 @@ class _OfflinkAppState extends State<OfflinkApp> {
               bleConnection: widget.bleConnection,
               packetTransport: widget.packetTransport,
               meshRouter: widget.meshRouter,
+              discovery: widget.discovery,
+              powerCoordinator: widget.powerCoordinator,
               lifecycleCoordinator: widget.lifecycleCoordinator,
               connectionRecovery: widget.connectionRecovery,
               identityManager: widget.identityManager,

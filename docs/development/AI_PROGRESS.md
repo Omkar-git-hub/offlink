@@ -1,30 +1,33 @@
 # AI Progress & Execution Checkpoint
 
 ## Current Module & Feature Branch
-- **Module**: Module 9 — Location Sharing: Privacy-Preserving Offline Location Communication
-- **Branch**: `feature/location-sharing`
+- **Module**: Module 10 — Battery Optimization & Adaptive BLE Operation
+- **Branch**: `feature/battery-optimization`
 - **Target**: `main`
 
 ## Objective & Acceptance Criteria
-- Offline-First, Privacy-Preserving Location Sharing:
-  - Added `OfflinkMessageType.location` (`'loc'`).
-  - Created `PositionData` domain entity and `LocationPayload` wire/persistence model with boundary validation (-90..90, -180..180).
-  - Created `LocationProvider` domain interface and `GeolocatorLocationProvider` platform implementation wrapping `package:geolocator`.
-  - Implemented `LocationService` managing one-time location snapshots, periodic live tracking sessions, expiration timers, and lifecycle-aware throttling.
-- Security, Relay Privacy & Zero-Plaintext Enforcement:
-  - Pairwise E2E Encryption: All location messages are encrypted under recipient pairwise session keys via `SecureSessionService` (X25519 + AES-256-GCM AEAD). Plaintext transmission is strictly rejected.
-  - Multi-Hop Relay Privacy: Intermediate mesh relays route ciphertext packets only without decrypting or logging coordinates. Verified via multi-hop mesh and DTN store-and-forward integration tests.
-  - Authorization Verification: Envelope sender must match inner payload sender. Group locations verify that both sender and local receiver are authorized group members. Expired packets are rejected.
-  - Retention & Data Minimization: No separate location history or GPS track logging table. Live location messages reuse a single message ID (`loc-live-${liveSessionId}`) and update existing records in-place.
-- User Controls & Presentation:
-  - Implemented `LocationBubble` widget displaying formatted coordinates (5 decimals), accuracy radius (±m), LIVE status indicator, and a modal details dialog with offline coordinate copy.
-  - Implemented `LocationSharingSheet` modal sheet providing transparent recipient disclosure, permission warnings, one-time snapshot trigger, duration selector (15m, 30m, 60m), and active live sharing stop button.
-  - Integrated location sharing controls into `ChatPage`, `GroupChatPage`, `HomePage`, and `main.dart`.
+- Adaptive Duty-Cycled BLE Discovery:
+  - Created `BatteryMode` (`active`, `balanced`, `lowPower`, `conserve`) and `BatteryOptimizationPolicy` defining scan/pause windows, dutyCycleRatio, and reconnection parameters.
+  - Implemented `AdaptiveBleDiscovery` decorator alternating between scan and pause windows (e.g. 8s/4s in active, 6s/12s in balanced, 4s/60s in lowPower, 4s/120s in conserve), reducing BLE scan radio power draw by 33% to 94%.
+  - Retained peripheral advertising during pause windows so remote nodes can initiate incoming connections while scan radio rests.
+  - Automatic `completeScanCycle()` invocation at cycle boundaries to prune out-of-range nodes.
+  - Immediate reactive scan triggering on user pull-to-refresh or outgoing message queuing.
+- Idle Timer Elimination (Zero Idle CPU Wakeups & Disk Writes):
+  - `LocationService`: Removed unconditional 1s periodic timer from constructor; lazily starts only when live sessions are active, and cancels immediately when all live sessions expire or are stopped (saving 3,600 CPU wakeups/hour).
+  - `PendingMessageRecoveryService`: Suspends 10s periodic polling when pending message queue is empty (saving ~360 SQLite disk reads/hour). Resumes upon message queuing or app resume.
+  - `StoreAndForwardManager`: Suspends 15s maintenance polling when store-and-forward queue is empty (saving ~240 SQLite disk reads/hour). Resumes upon in-transit packet queuing.
+- Reconnection Storm Mitigation & Mesh Efficiency:
+  - `ConnectionRecoveryCoordinator`: Enforced `minAttemptSpacing` (500ms) between connection attempts across all peers; capped background attempts to 3 (down from 5) with increased initial delay (4s).
+  - `MeshPacketRouter`: Suppressed echoing flooded packets back to originating sender node in `_floodPacket()`.
+- Central Power Policy Coordination:
+  - Implemented `AdaptivePowerCoordinator` observing app lifecycle, connected peer counts, pending message queues, and active live location sessions.
+  - Wired into `AppLifecycleCoordinator`, `HomePage`, and `main.dart`.
+- Security & Cryptographic Invariance:
+  - Zero cryptographic weakening; encryption and message integrity remain 100% active.
 - Verification Suite:
-  - Comprehensive unit, integration, and widget tests (272/272 tests passing across entire repository).
-  - `dart format`: PASS (0 differences across 154 files).
+  - 287/287 tests passing across entire repository (15 new tests added for Module 10).
+  - `dart format`: PASS (0 differences across 160 files).
   - `flutter analyze`: PASS (0 issues found).
-  - `flutter test`: PASS (272/272 tests passing, 33 new tests added for Module 9).
   - `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built successfully).
 
 ## Status
@@ -39,37 +42,33 @@
 6. **Module 6 Merged into main**: PR #17 merged (`9729972`).
 7. **Module 7 Merged into main**: PR #18 merged (`93fe8f4`).
 8. **Module 8 Merged into main**: PR #19 merged (`81c3ee8`).
-9. **Module 9 Location Sharing**:
-   - Extended `OfflinkMessageType` with `location` (`'loc'`) and updated `OfflinkMessageTypeCodec`.
-   - Created `PositionData` (`lib/domain/location/position_data.dart`).
-   - Created `LocationPayload` (`lib/domain/location/location_payload.dart`) with `LocationSharingType` (`oneTime`, `liveUpdate`, `liveStop`), wire encoding/decoding, and boundary validation.
-   - Created `LocationProvider` interface (`lib/domain/location/location_provider.dart`) and `GeolocatorLocationProvider` (`lib/data/location/geolocator_location_provider.dart`).
-   - Created `LiveLocationSession` domain entity (`lib/domain/location/live_location_session.dart`).
-   - Implemented `LocationService` (`lib/domain/location/location_service.dart`) with snapshot, live tracking, in-place message upsert, pairwise session encryption, group fanout, envelope-sender validation, group authorization, reverse-path ACKs, auto-expiration, and background throttling.
-   - Filtered location messages in `DirectMessageService` to prevent double-processing.
-   - Implemented `LocationBubble` (`lib/features/location/location_bubble.dart`) and `LocationSharingSheet` (`lib/features/location/location_sharing_sheet.dart`).
-   - Integrated into `ChatPage`, `GroupChatPage`, `HomePage`, and `main.dart`.
-   - Added unit tests for location payload, location service, 3-node multi-hop mesh and DTN store-and-forward relay integration, and widget tests for location bubble and sharing sheet.
-10. **Architectural Decisions Recorded**:
-    - Recorded `DECISION-011` in `docs/development/AI_DECISIONS.md`.
+9. **Module 9 Merged into main**: PR #20 merged (`99e056a`).
+10. **Module 10 Battery Optimization & Adaptive BLE Operation**:
+    - Created `BatteryMode` and `BatteryOptimizationPolicy` (`lib/domain/battery/battery_mode.dart`).
+    - Implemented `AdaptiveBleDiscovery` (`lib/bluetooth/adaptive_ble_discovery.dart`).
+    - Implemented `AdaptivePowerCoordinator` (`lib/domain/battery/adaptive_power_coordinator.dart`).
+    - Eliminated idle periodic timers in `LocationService`, `PendingMessageRecoveryService`, and `StoreAndForwardManager`.
+    - Enhanced `ConnectionRecoveryCoordinator` with inter-attempt spacing and background caps.
+    - Suppressed sender echo loops in `MeshPacketRouter`.
+    - Integrated with `AppLifecycleCoordinator`, `HomePage`, and `main.dart`.
+    - Added comprehensive unit tests for adaptive discovery, power coordinator, and idle timer elimination.
+    - Updated `docs/product/BATTERY.md` and recorded `DECISION-012` in `docs/development/AI_DECISIONS.md`.
 
 ## Tests Run & Results
-- `dart format --output=none --set-exit-if-changed .`: PASS (0 differences across 154 files)
+- `dart format --output=none --set-exit-if-changed .`: PASS (0 differences across 160 files)
 - `flutter analyze`: PASS (0 issues found)
-- `flutter test`: PASS (272/272 tests passing, 33 new tests added for Module 9)
-  - `test/unit/location/location_payload_test.dart` (8 tests)
-  - `test/unit/location/location_service_test.dart` (12 tests)
-  - `test/unit/location/location_mesh_integration_test.dart` (2 tests: 3-node multi-hop mesh and DTN store-and-forward)
-  - `test/widget/location/location_bubble_test.dart` (4 tests)
-  - `test/widget/location/location_sharing_sheet_test.dart` (7 tests)
-  - All existing 239 unit, widget, and lifecycle tests passing.
-- `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built in 118.8s)
+- `flutter test`: PASS (287/287 tests passing, 15 new tests added for Module 10)
+  - `test/unit/bluetooth/adaptive_ble_discovery_test.dart` (4 tests)
+  - `test/unit/battery/adaptive_power_coordinator_test.dart` (6 tests)
+  - `test/unit/battery/idle_timer_elimination_test.dart` (5 tests)
+  - All existing 272 unit, widget, and lifecycle tests passing.
+- `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk`)
 
 ## Known Failures & Unresolved Issues
 - None.
 
 ## Exact Next Action
-1. Stage and commit changes to `feature/location-sharing`.
+1. Stage and commit changes to `feature/battery-optimization`.
 2. Push branch to GitHub.
 3. Open pull request targeting `main`.
 4. Monitor CI workflow run.

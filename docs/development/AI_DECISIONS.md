@@ -133,3 +133,31 @@ This document records durable architectural, protocol, security, and compatibili
   - Group Location Fanout: For group location sharing, coordinates are encrypted pairwise for every active group member (`GroupRepository.getGroupMembers`). Intermediate relays forward ciphertext packets to individual member IDs. On receipt, authorization is verified: envelope sender must match payload sender, and both sender and recipient must be authorized members of the group.
   - Store-and-Forward & Mesh Relay Compatibility: Location packets are standard `OfflinkPacket` instances. When an intended recipient is offline or out of range, relay nodes enqueue the encrypted packet in `DriftStoreAndForwardRepository` and opportunisticly flush it upon reconnection, verified via end-to-end integration tests.
 - **Status**: Implemented in Module 9 (`feature/location-sharing`).
+
+---
+
+## DECISION-012: Battery Optimization, Adaptive Duty-Cycled BLE Discovery, Idle Timer Elimination, and Reconnection Storm Mitigation
+- **Context**: In off-grid and disaster situations, device battery longevity directly determines communications availability. Continuous BLE scanning keeps the radio receiver hardware energised 100% of the time, consuming 10%–25% device battery per hour. Unconditional periodic timers (e.g. 1s GPS ticks or 10s–15s SQLite polling) repeatedly wake the CPU from deep sleep (C-states) and trigger unnecessary disk writes even when the app is completely idle. Simultaneous GATT reconnection attempts across peers cause radio channel congestion and connection thrashing. Flooding mesh packets back to their originating sender creates redundant multi-hop ping-pong broadcasts.
+- **Decision**:
+  - Adaptive Duty-Cycled BLE Discovery (`AdaptiveBleDiscovery`): Implemented a decorator for `BleDiscovery` that alternates between active scanning windows and resting pause windows according to `BatteryOptimizationPolicy`:
+    - `active`: 8s scan / 4s pause (66.7% radio on-time, 33.3% idle radio savings) for active navigation/chat or pending queue flush.
+    - `balanced`: 6s scan / 12s pause (33.3% radio on-time, 66.7% idle radio savings) for foreground connected mesh nodes with idle traffic.
+    - `lowPower`: 4s scan / 60s pause (6.25% radio on-time, 93.75% idle radio savings) for minimized/background operation under Android foreground service.
+    - `conserve`: 4s scan / 120s pause (3.23% radio on-time, 96.77% idle radio savings) for extended silence or low-battery preservation.
+  - Peripheral Advertising Continuity: During scan pause windows, peripheral advertising remains active. Remote peers can initiate incoming GATT connections at any moment while our scan receiver rests.
+  - Cycle-End Ghost Node Pruning: `completeScanCycle()` is automatically invoked at the conclusion of each active scan window, purging stale peers that walked out of RF range without accumulating phantom entries.
+  - Immediate Reactive Scan Triggers: User pull-to-refresh on `HomePage` or enqueueing of outgoing messages immediately triggers a fresh scan cycle, ensuring zero responsiveness penalty from duty cycling.
+  - Idle Timer Elimination (Zero Idle CPU Wakeups):
+    - `LocationService`: Removed unconditional 1s periodic timer from constructor; lazily spawns only when at least one live location session is active, and cancels immediately when all live sessions expire or are stopped, eliminating 3,600 CPU wakeups/hour when idle.
+    - `PendingMessageRecoveryService`: Suspends the 10s periodic polling timer when the outgoing unacknowledged queue is empty, eliminating ~360 SQLite queries/hour when idle. Resumes upon `notifyPendingMessageQueued()` or app resume.
+    - `StoreAndForwardManager`: Suspends the 15s periodic maintenance timer when `getQueueSize() == 0`, eliminating ~240 SQLite queries/hour when idle. Resumes upon `enqueueInTransitPacket()`.
+  - Reconnection Storm Mitigation (`ConnectionRecoveryCoordinator`):
+    - Global Inter-Peer Spacing: Enforced `minAttemptSpacing` (500ms) between successive connection attempts across all peers to eliminate simultaneous GATT handshake collision storms.
+    - Background Attempt Capping: In background mode, capped maximum reconnection attempts to 3 (down from 5) with an increased initial delay (4s instead of 1s) to conserve background battery.
+  - Mesh Relay Flood Suppression (`MeshPacketRouter`):
+    - In `_floodPacket()`, intermediate relays explicitly skip `peerId == packet.senderNodeId`, preventing echoing flooded packets back to the originating node and eliminating multi-hop radio channel loops.
+  - Power Policy Coordination (`AdaptivePowerCoordinator`):
+    - Dynamically evaluates lifecycle transitions, connected peer counts, pending queue state, and active live location sessions to transition seamlessly between `active`, `balanced`, and `lowPower` modes.
+  - Cryptographic & Integrity Invariance: No encryption keys, HMAC signature validations, or payload integrity checks are weakened or bypassed for battery savings. All cryptographic operations remain 100% active.
+- **Status**: Implemented in Module 10 (`feature/battery-optimization`).
+

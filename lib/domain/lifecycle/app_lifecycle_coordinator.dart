@@ -3,7 +3,10 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 
+import '../../bluetooth/adaptive_ble_discovery.dart';
 import '../../bluetooth/discovery.dart';
+import '../battery/adaptive_power_coordinator.dart';
+import '../battery/battery_mode.dart';
 import '../queue/store_and_forward_manager.dart';
 import 'app_lifecycle_manager.dart';
 import 'background_service_contract.dart';
@@ -18,12 +21,14 @@ class AppLifecycleCoordinator {
     required PendingMessageRecoveryService pendingMessageRecovery,
     StoreAndForwardManager? storeAndForwardManager,
     BleDiscovery? discovery,
+    AdaptivePowerCoordinator? powerCoordinator,
   }) : _lifecycleManager = lifecycleManager,
        _backgroundService = backgroundService,
        _connectionRecovery = connectionRecovery,
        _pendingMessageRecovery = pendingMessageRecovery,
        _storeAndForwardManager = storeAndForwardManager,
-       _discovery = discovery {
+       _discovery = discovery,
+       _powerCoordinator = powerCoordinator {
     _subscription = _lifecycleManager.lifecycleChanges.listen(
       _handleLifecycleTransition,
     );
@@ -35,6 +40,7 @@ class AppLifecycleCoordinator {
   final PendingMessageRecoveryService _pendingMessageRecovery;
   final StoreAndForwardManager? _storeAndForwardManager;
   final BleDiscovery? _discovery;
+  final AdaptivePowerCoordinator? _powerCoordinator;
 
   StreamSubscription<AppLifecycleState>? _subscription;
   bool _isBackgroundServiceActive = false;
@@ -45,6 +51,7 @@ class AppLifecycleCoordinator {
   PendingMessageRecoveryService get pendingMessageRecovery =>
       _pendingMessageRecovery;
   StoreAndForwardManager? get storeAndForwardManager => _storeAndForwardManager;
+  AdaptivePowerCoordinator? get powerCoordinator => _powerCoordinator;
   bool get isBackgroundServiceActive => _isBackgroundServiceActive;
 
   void initialize() {
@@ -79,10 +86,22 @@ class AppLifecycleCoordinator {
     // 2. Process store and forward queue
     await _storeAndForwardManager?.processStoreAndForward();
 
-    // 3. Ensure discovery scanning is restarted if stopped
-    if (_discovery != null) {
+    // 3. Inform connection recovery of foreground state
+    _connectionRecovery.setBackgroundState(false);
+
+    // 4. Update power mode and discovery policy
+    final powerCoordinator = _powerCoordinator;
+    final discovery = _discovery;
+    if (powerCoordinator != null) {
+      powerCoordinator.onAppForegrounded();
+    } else if (discovery is AdaptiveBleDiscovery) {
+      discovery.updatePolicy(BatteryOptimizationPolicy.active());
+    }
+
+    // 5. Ensure discovery scanning is restarted if stopped
+    if (discovery != null) {
       try {
-        await _discovery.startScanning();
+        await discovery.startScanning();
       } catch (_) {
         // Safe fallback if Bluetooth unavailable
       }
@@ -101,11 +120,20 @@ class AppLifecycleCoordinator {
       _isBackgroundServiceActive = false;
     }
 
-    // 2. To optimize battery in background, avoid aggressive continuous scanning
-    // while keeping peripheral advertising active for incoming connections.
-    if (_discovery != null) {
+    // 2. Inform connection recovery of background state
+    _connectionRecovery.setBackgroundState(true);
+
+    // 3. Update power mode and discovery policy
+    final powerCoordinator = _powerCoordinator;
+    final discovery = _discovery;
+    if (powerCoordinator != null) {
+      powerCoordinator.onAppBackgrounded();
+    } else if (discovery is AdaptiveBleDiscovery) {
+      discovery.updatePolicy(BatteryOptimizationPolicy.lowPower());
+    } else if (discovery != null) {
+      // Legacy fallback: stop continuous scanning in background
       try {
-        await _discovery.stopScanning();
+        await discovery.stopScanning();
       } catch (_) {}
     }
   }
@@ -123,6 +151,7 @@ class AppLifecycleCoordinator {
     _pendingMessageRecovery.dispose();
     _connectionRecovery.dispose();
     _storeAndForwardManager?.dispose();
+    _powerCoordinator?.dispose();
     _lifecycleManager.dispose();
   }
 }

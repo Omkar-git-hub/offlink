@@ -215,7 +215,7 @@ class MeshPacketRouter implements PacketTransport {
 
     var sentToAny = false;
     for (final peerId in neighbors) {
-      if (peerId == excludePeerId) {
+      if (peerId == excludePeerId || peerId == packet.senderNodeId) {
         continue;
       }
       try {
