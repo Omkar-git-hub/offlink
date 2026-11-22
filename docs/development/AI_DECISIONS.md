@@ -161,3 +161,35 @@ This document records durable architectural, protocol, security, and compatibili
   - Cryptographic & Integrity Invariance: No encryption keys, HMAC signature validations, or payload integrity checks are weakened or bypassed for battery savings. All cryptographic operations remain 100% active.
 - **Status**: Implemented in Module 10 (`feature/battery-optimization`).
 
+---
+
+## DECISION-013: Local Serverless Peer Blocking, Sliding-Window Inbound Flood Quarantine, Deterministic Symmetric Safety Fingerprints, and Protocol Fuzzing
+- **Context**: In decentralized peer-to-peer mesh networks lacking centralized authentication servers or moderation authority, malicious or malfunctioning nodes can attempt to disrupt local mesh operations or harass individual users. Attacks include:
+  1. Targeted harassment / spamming from rogue peers.
+  2. RF / CPU / Disk battery-exhaustion flooding attacks (flooding thousands of invalid packets or connection attempts).
+  3. Man-In-The-Middle (MITM) attacks where an active adversary substitutes ephemeral or identity keys.
+  4. Malformed packet fuzzing / crash attacks targeting binary packet decoders, JSON deserializers, or router logic.
+- **Decision**:
+  - **Local Serverless Peer Blocking (`PeerSecurityRepository`, `DriftPeerSecurityRepository`)**:
+    - Drift schema version 4 introduces `BlockedPeersTable` (`nodeId`, `blockedAt`, `reason`) and `PeerTrustTable` (`peerNodeId`, `peerPublicKey`, `safetyFingerprint`, `trustStatus`, `verifiedAt`, `updatedAt`).
+    - Ingress Discard: `MeshPacketRouter` checks blocked status synchronously using in-memory cached sets at the earliest entry point (`handleIncomingPacket`). Packets from blocked nodes are discarded immediately before cryptographic decryption, routing table updates, or SQLite writes, preventing resource exhaustion.
+    - Relay Suppression: Mesh packets originating from (`senderNodeId`) or addressed to (`recipientNodeId`) blocked nodes are dropped before forwarding to adjacent peers.
+    - Transport & Discovery Filtering: `AdaptiveBleDiscovery` silences discovered peer events from blocked nodes so they do not appear in nearby scan lists. `ConnectionRecoveryCoordinator` skips reconnect attempts to blocked peers.
+    - Outbound Send Rejection: `DirectMessageService.sendMessage()` synchronously throws a `StateError` if the destination node is blocked.
+  - **Inbound Flood Rate Limiting & Quarantine (`FloodRateLimiter`)**:
+    - Sliding-Window Throttle: Every incoming packet is evaluated per `senderNodeId` over a sliding window (`windowDuration`: 3s, `maxPacketsPerWindow`: 15 packets).
+    - Automatic Escalating Quarantine: Senders violating the rate threshold accumulate strikes. Upon reaching 3 strikes, the node enters a 30-second quarantine (`quarantineDuration`: 30s) during which all inbound packets are dropped without evaluation.
+    - Self-Healing Memory Management: Clean-up routines automatically prune stale sender buckets every minute or whenever tracking exceeds 500 nodes, bounding memory usage under adversarial node ID spoofing.
+  - **Cryptographic Safety Fingerprints & MITM Detection (`SafetyFingerprintGenerator`)**:
+    - Deterministic Symmetric Pairing: To guarantee identical numbers on both devices without out-of-band role negotiation, public keys are canonicalized and lexicographically sorted (`sortedKeys = [localKey, peerKey]..sort()`).
+    - Digest & Formatting: A SHA-256 hash transcript `offlink-safety-v1:$k1:$k2` is computed and formatted into 60 decimal digits grouped into 12 chunks of 5 digits (`00000 00000 ...`), with visual chunk styling in the UI.
+    - Automatic Key Mismatch Detection: On receiving an X25519/Ed25519 handshake packet (`HandshakeInitPayload`), `DirectMessageService` verifies the incoming public key against `PeerTrustTable`. If the node ID was previously seen with a different key, status is set to `TrustStatus.mismatched`, active handshake responses are aborted, and a persistent warning banner is displayed on `ChatPage`.
+  - **Security UI Controls**:
+    - `ChatPage`: Displays safety fingerprint verification dialog, key mismatch alerts, blocked contact banner, and disables message input when blocked.
+    - `HomePage`: Features a dedicated blocked contacts management bottom sheet (`Icons.block`) allowing review and unblocking.
+  - **Protocol Fuzzing & Resilience (`test/unit/protocol/protocol_fuzz_test.dart`)**:
+    - A dedicated fuzzing suite tests mutated, truncated, corrupted, and oversized binary frames across `OfflinkPacketDecoder`, handshake payloads, location payloads, group payloads, and `MeshPacketRouter`.
+    - Zero crashes, unhandled exceptions, or denial-of-service conditions confirmed across corrupted payloads.
+- **Status**: Implemented in Module 11 (`feature/security-hardening-abuse-controls`).
+
+

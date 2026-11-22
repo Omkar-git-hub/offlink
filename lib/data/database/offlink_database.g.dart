@@ -2395,6 +2395,715 @@ class GroupMembersTableCompanion
   }
 }
 
+class $BlockedPeersTableTable extends BlockedPeersTable
+    with TableInfo<$BlockedPeersTableTable, BlockedPeersTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BlockedPeersTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _nodeIdMeta = const VerificationMeta('nodeId');
+  @override
+  late final GeneratedColumn<String> nodeId = GeneratedColumn<String>(
+    'node_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _blockedAtMeta = const VerificationMeta(
+    'blockedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> blockedAt = GeneratedColumn<DateTime>(
+    'blocked_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
+  @override
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('manual'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [nodeId, blockedAt, reason];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'blocked_peers_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BlockedPeersTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('node_id')) {
+      context.handle(
+        _nodeIdMeta,
+        nodeId.isAcceptableOrUnknown(data['node_id']!, _nodeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nodeIdMeta);
+    }
+    if (data.containsKey('blocked_at')) {
+      context.handle(
+        _blockedAtMeta,
+        blockedAt.isAcceptableOrUnknown(data['blocked_at']!, _blockedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_blockedAtMeta);
+    }
+    if (data.containsKey('reason')) {
+      context.handle(
+        _reasonMeta,
+        reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {nodeId};
+  @override
+  BlockedPeersTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BlockedPeersTableData(
+      nodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}node_id'],
+      )!,
+      blockedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}blocked_at'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+    );
+  }
+
+  @override
+  $BlockedPeersTableTable createAlias(String alias) {
+    return $BlockedPeersTableTable(attachedDatabase, alias);
+  }
+}
+
+class BlockedPeersTableData extends DataClass
+    implements Insertable<BlockedPeersTableData> {
+  final String nodeId;
+  final DateTime blockedAt;
+  final String reason;
+  const BlockedPeersTableData({
+    required this.nodeId,
+    required this.blockedAt,
+    required this.reason,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['node_id'] = Variable<String>(nodeId);
+    map['blocked_at'] = Variable<DateTime>(blockedAt);
+    map['reason'] = Variable<String>(reason);
+    return map;
+  }
+
+  BlockedPeersTableCompanion toCompanion(bool nullToAbsent) {
+    return BlockedPeersTableCompanion(
+      nodeId: Value(nodeId),
+      blockedAt: Value(blockedAt),
+      reason: Value(reason),
+    );
+  }
+
+  factory BlockedPeersTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BlockedPeersTableData(
+      nodeId: serializer.fromJson<String>(json['nodeId']),
+      blockedAt: serializer.fromJson<DateTime>(json['blockedAt']),
+      reason: serializer.fromJson<String>(json['reason']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'nodeId': serializer.toJson<String>(nodeId),
+      'blockedAt': serializer.toJson<DateTime>(blockedAt),
+      'reason': serializer.toJson<String>(reason),
+    };
+  }
+
+  BlockedPeersTableData copyWith({
+    String? nodeId,
+    DateTime? blockedAt,
+    String? reason,
+  }) => BlockedPeersTableData(
+    nodeId: nodeId ?? this.nodeId,
+    blockedAt: blockedAt ?? this.blockedAt,
+    reason: reason ?? this.reason,
+  );
+  BlockedPeersTableData copyWithCompanion(BlockedPeersTableCompanion data) {
+    return BlockedPeersTableData(
+      nodeId: data.nodeId.present ? data.nodeId.value : this.nodeId,
+      blockedAt: data.blockedAt.present ? data.blockedAt.value : this.blockedAt,
+      reason: data.reason.present ? data.reason.value : this.reason,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BlockedPeersTableData(')
+          ..write('nodeId: $nodeId, ')
+          ..write('blockedAt: $blockedAt, ')
+          ..write('reason: $reason')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(nodeId, blockedAt, reason);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BlockedPeersTableData &&
+          other.nodeId == this.nodeId &&
+          other.blockedAt == this.blockedAt &&
+          other.reason == this.reason);
+}
+
+class BlockedPeersTableCompanion
+    extends UpdateCompanion<BlockedPeersTableData> {
+  final Value<String> nodeId;
+  final Value<DateTime> blockedAt;
+  final Value<String> reason;
+  final Value<int> rowid;
+  const BlockedPeersTableCompanion({
+    this.nodeId = const Value.absent(),
+    this.blockedAt = const Value.absent(),
+    this.reason = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BlockedPeersTableCompanion.insert({
+    required String nodeId,
+    required DateTime blockedAt,
+    this.reason = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : nodeId = Value(nodeId),
+       blockedAt = Value(blockedAt);
+  static Insertable<BlockedPeersTableData> custom({
+    Expression<String>? nodeId,
+    Expression<DateTime>? blockedAt,
+    Expression<String>? reason,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (nodeId != null) 'node_id': nodeId,
+      if (blockedAt != null) 'blocked_at': blockedAt,
+      if (reason != null) 'reason': reason,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BlockedPeersTableCompanion copyWith({
+    Value<String>? nodeId,
+    Value<DateTime>? blockedAt,
+    Value<String>? reason,
+    Value<int>? rowid,
+  }) {
+    return BlockedPeersTableCompanion(
+      nodeId: nodeId ?? this.nodeId,
+      blockedAt: blockedAt ?? this.blockedAt,
+      reason: reason ?? this.reason,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (nodeId.present) {
+      map['node_id'] = Variable<String>(nodeId.value);
+    }
+    if (blockedAt.present) {
+      map['blocked_at'] = Variable<DateTime>(blockedAt.value);
+    }
+    if (reason.present) {
+      map['reason'] = Variable<String>(reason.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BlockedPeersTableCompanion(')
+          ..write('nodeId: $nodeId, ')
+          ..write('blockedAt: $blockedAt, ')
+          ..write('reason: $reason, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PeerTrustTableTable extends PeerTrustTable
+    with TableInfo<$PeerTrustTableTable, PeerTrustTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PeerTrustTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _peerNodeIdMeta = const VerificationMeta(
+    'peerNodeId',
+  );
+  @override
+  late final GeneratedColumn<String> peerNodeId = GeneratedColumn<String>(
+    'peer_node_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _peerPublicKeyMeta = const VerificationMeta(
+    'peerPublicKey',
+  );
+  @override
+  late final GeneratedColumn<String> peerPublicKey = GeneratedColumn<String>(
+    'peer_public_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _safetyFingerprintMeta = const VerificationMeta(
+    'safetyFingerprint',
+  );
+  @override
+  late final GeneratedColumn<String> safetyFingerprint =
+      GeneratedColumn<String>(
+        'safety_fingerprint',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _trustStatusMeta = const VerificationMeta(
+    'trustStatus',
+  );
+  @override
+  late final GeneratedColumn<String> trustStatus = GeneratedColumn<String>(
+    'trust_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('unverified'),
+  );
+  static const VerificationMeta _verifiedAtMeta = const VerificationMeta(
+    'verifiedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> verifiedAt = GeneratedColumn<DateTime>(
+    'verified_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    peerNodeId,
+    peerPublicKey,
+    safetyFingerprint,
+    trustStatus,
+    verifiedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'peer_trust_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PeerTrustTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('peer_node_id')) {
+      context.handle(
+        _peerNodeIdMeta,
+        peerNodeId.isAcceptableOrUnknown(
+          data['peer_node_id']!,
+          _peerNodeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_peerNodeIdMeta);
+    }
+    if (data.containsKey('peer_public_key')) {
+      context.handle(
+        _peerPublicKeyMeta,
+        peerPublicKey.isAcceptableOrUnknown(
+          data['peer_public_key']!,
+          _peerPublicKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_peerPublicKeyMeta);
+    }
+    if (data.containsKey('safety_fingerprint')) {
+      context.handle(
+        _safetyFingerprintMeta,
+        safetyFingerprint.isAcceptableOrUnknown(
+          data['safety_fingerprint']!,
+          _safetyFingerprintMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_safetyFingerprintMeta);
+    }
+    if (data.containsKey('trust_status')) {
+      context.handle(
+        _trustStatusMeta,
+        trustStatus.isAcceptableOrUnknown(
+          data['trust_status']!,
+          _trustStatusMeta,
+        ),
+      );
+    }
+    if (data.containsKey('verified_at')) {
+      context.handle(
+        _verifiedAtMeta,
+        verifiedAt.isAcceptableOrUnknown(data['verified_at']!, _verifiedAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {peerNodeId};
+  @override
+  PeerTrustTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PeerTrustTableData(
+      peerNodeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}peer_node_id'],
+      )!,
+      peerPublicKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}peer_public_key'],
+      )!,
+      safetyFingerprint: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}safety_fingerprint'],
+      )!,
+      trustStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}trust_status'],
+      )!,
+      verifiedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}verified_at'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PeerTrustTableTable createAlias(String alias) {
+    return $PeerTrustTableTable(attachedDatabase, alias);
+  }
+}
+
+class PeerTrustTableData extends DataClass
+    implements Insertable<PeerTrustTableData> {
+  final String peerNodeId;
+  final String peerPublicKey;
+  final String safetyFingerprint;
+  final String trustStatus;
+  final DateTime? verifiedAt;
+  final DateTime updatedAt;
+  const PeerTrustTableData({
+    required this.peerNodeId,
+    required this.peerPublicKey,
+    required this.safetyFingerprint,
+    required this.trustStatus,
+    this.verifiedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['peer_node_id'] = Variable<String>(peerNodeId);
+    map['peer_public_key'] = Variable<String>(peerPublicKey);
+    map['safety_fingerprint'] = Variable<String>(safetyFingerprint);
+    map['trust_status'] = Variable<String>(trustStatus);
+    if (!nullToAbsent || verifiedAt != null) {
+      map['verified_at'] = Variable<DateTime>(verifiedAt);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  PeerTrustTableCompanion toCompanion(bool nullToAbsent) {
+    return PeerTrustTableCompanion(
+      peerNodeId: Value(peerNodeId),
+      peerPublicKey: Value(peerPublicKey),
+      safetyFingerprint: Value(safetyFingerprint),
+      trustStatus: Value(trustStatus),
+      verifiedAt: verifiedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(verifiedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PeerTrustTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PeerTrustTableData(
+      peerNodeId: serializer.fromJson<String>(json['peerNodeId']),
+      peerPublicKey: serializer.fromJson<String>(json['peerPublicKey']),
+      safetyFingerprint: serializer.fromJson<String>(json['safetyFingerprint']),
+      trustStatus: serializer.fromJson<String>(json['trustStatus']),
+      verifiedAt: serializer.fromJson<DateTime?>(json['verifiedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'peerNodeId': serializer.toJson<String>(peerNodeId),
+      'peerPublicKey': serializer.toJson<String>(peerPublicKey),
+      'safetyFingerprint': serializer.toJson<String>(safetyFingerprint),
+      'trustStatus': serializer.toJson<String>(trustStatus),
+      'verifiedAt': serializer.toJson<DateTime?>(verifiedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  PeerTrustTableData copyWith({
+    String? peerNodeId,
+    String? peerPublicKey,
+    String? safetyFingerprint,
+    String? trustStatus,
+    Value<DateTime?> verifiedAt = const Value.absent(),
+    DateTime? updatedAt,
+  }) => PeerTrustTableData(
+    peerNodeId: peerNodeId ?? this.peerNodeId,
+    peerPublicKey: peerPublicKey ?? this.peerPublicKey,
+    safetyFingerprint: safetyFingerprint ?? this.safetyFingerprint,
+    trustStatus: trustStatus ?? this.trustStatus,
+    verifiedAt: verifiedAt.present ? verifiedAt.value : this.verifiedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  PeerTrustTableData copyWithCompanion(PeerTrustTableCompanion data) {
+    return PeerTrustTableData(
+      peerNodeId: data.peerNodeId.present
+          ? data.peerNodeId.value
+          : this.peerNodeId,
+      peerPublicKey: data.peerPublicKey.present
+          ? data.peerPublicKey.value
+          : this.peerPublicKey,
+      safetyFingerprint: data.safetyFingerprint.present
+          ? data.safetyFingerprint.value
+          : this.safetyFingerprint,
+      trustStatus: data.trustStatus.present
+          ? data.trustStatus.value
+          : this.trustStatus,
+      verifiedAt: data.verifiedAt.present
+          ? data.verifiedAt.value
+          : this.verifiedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PeerTrustTableData(')
+          ..write('peerNodeId: $peerNodeId, ')
+          ..write('peerPublicKey: $peerPublicKey, ')
+          ..write('safetyFingerprint: $safetyFingerprint, ')
+          ..write('trustStatus: $trustStatus, ')
+          ..write('verifiedAt: $verifiedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    peerNodeId,
+    peerPublicKey,
+    safetyFingerprint,
+    trustStatus,
+    verifiedAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PeerTrustTableData &&
+          other.peerNodeId == this.peerNodeId &&
+          other.peerPublicKey == this.peerPublicKey &&
+          other.safetyFingerprint == this.safetyFingerprint &&
+          other.trustStatus == this.trustStatus &&
+          other.verifiedAt == this.verifiedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PeerTrustTableCompanion extends UpdateCompanion<PeerTrustTableData> {
+  final Value<String> peerNodeId;
+  final Value<String> peerPublicKey;
+  final Value<String> safetyFingerprint;
+  final Value<String> trustStatus;
+  final Value<DateTime?> verifiedAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const PeerTrustTableCompanion({
+    this.peerNodeId = const Value.absent(),
+    this.peerPublicKey = const Value.absent(),
+    this.safetyFingerprint = const Value.absent(),
+    this.trustStatus = const Value.absent(),
+    this.verifiedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PeerTrustTableCompanion.insert({
+    required String peerNodeId,
+    required String peerPublicKey,
+    required String safetyFingerprint,
+    this.trustStatus = const Value.absent(),
+    this.verifiedAt = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : peerNodeId = Value(peerNodeId),
+       peerPublicKey = Value(peerPublicKey),
+       safetyFingerprint = Value(safetyFingerprint),
+       updatedAt = Value(updatedAt);
+  static Insertable<PeerTrustTableData> custom({
+    Expression<String>? peerNodeId,
+    Expression<String>? peerPublicKey,
+    Expression<String>? safetyFingerprint,
+    Expression<String>? trustStatus,
+    Expression<DateTime>? verifiedAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (peerNodeId != null) 'peer_node_id': peerNodeId,
+      if (peerPublicKey != null) 'peer_public_key': peerPublicKey,
+      if (safetyFingerprint != null) 'safety_fingerprint': safetyFingerprint,
+      if (trustStatus != null) 'trust_status': trustStatus,
+      if (verifiedAt != null) 'verified_at': verifiedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PeerTrustTableCompanion copyWith({
+    Value<String>? peerNodeId,
+    Value<String>? peerPublicKey,
+    Value<String>? safetyFingerprint,
+    Value<String>? trustStatus,
+    Value<DateTime?>? verifiedAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return PeerTrustTableCompanion(
+      peerNodeId: peerNodeId ?? this.peerNodeId,
+      peerPublicKey: peerPublicKey ?? this.peerPublicKey,
+      safetyFingerprint: safetyFingerprint ?? this.safetyFingerprint,
+      trustStatus: trustStatus ?? this.trustStatus,
+      verifiedAt: verifiedAt ?? this.verifiedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (peerNodeId.present) {
+      map['peer_node_id'] = Variable<String>(peerNodeId.value);
+    }
+    if (peerPublicKey.present) {
+      map['peer_public_key'] = Variable<String>(peerPublicKey.value);
+    }
+    if (safetyFingerprint.present) {
+      map['safety_fingerprint'] = Variable<String>(safetyFingerprint.value);
+    }
+    if (trustStatus.present) {
+      map['trust_status'] = Variable<String>(trustStatus.value);
+    }
+    if (verifiedAt.present) {
+      map['verified_at'] = Variable<DateTime>(verifiedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PeerTrustTableCompanion(')
+          ..write('peerNodeId: $peerNodeId, ')
+          ..write('peerPublicKey: $peerPublicKey, ')
+          ..write('safetyFingerprint: $safetyFingerprint, ')
+          ..write('trustStatus: $trustStatus, ')
+          ..write('verifiedAt: $verifiedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$OfflinkDatabase extends GeneratedDatabase {
   _$OfflinkDatabase(QueryExecutor e) : super(e);
   $OfflinkDatabaseManager get managers => $OfflinkDatabaseManager(this);
@@ -2406,6 +3115,9 @@ abstract class _$OfflinkDatabase extends GeneratedDatabase {
   late final $GroupsTableTable groupsTable = $GroupsTableTable(this);
   late final $GroupMembersTableTable groupMembersTable =
       $GroupMembersTableTable(this);
+  late final $BlockedPeersTableTable blockedPeersTable =
+      $BlockedPeersTableTable(this);
+  late final $PeerTrustTableTable peerTrustTable = $PeerTrustTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2416,6 +3128,8 @@ abstract class _$OfflinkDatabase extends GeneratedDatabase {
     queuedPacketsTable,
     groupsTable,
     groupMembersTable,
+    blockedPeersTable,
+    peerTrustTable,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -4179,6 +4893,440 @@ typedef $$GroupMembersTableTableProcessedTableManager =
       GroupMembersTableData,
       PrefetchHooks Function({bool groupId})
     >;
+typedef $$BlockedPeersTableTableCreateCompanionBuilder =
+    BlockedPeersTableCompanion Function({
+      required String nodeId,
+      required DateTime blockedAt,
+      Value<String> reason,
+      Value<int> rowid,
+    });
+typedef $$BlockedPeersTableTableUpdateCompanionBuilder =
+    BlockedPeersTableCompanion Function({
+      Value<String> nodeId,
+      Value<DateTime> blockedAt,
+      Value<String> reason,
+      Value<int> rowid,
+    });
+
+class $$BlockedPeersTableTableFilterComposer
+    extends Composer<_$OfflinkDatabase, $BlockedPeersTableTable> {
+  $$BlockedPeersTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get nodeId => $composableBuilder(
+    column: $table.nodeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get blockedAt => $composableBuilder(
+    column: $table.blockedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$BlockedPeersTableTableOrderingComposer
+    extends Composer<_$OfflinkDatabase, $BlockedPeersTableTable> {
+  $$BlockedPeersTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get nodeId => $composableBuilder(
+    column: $table.nodeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get blockedAt => $composableBuilder(
+    column: $table.blockedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reason => $composableBuilder(
+    column: $table.reason,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BlockedPeersTableTableAnnotationComposer
+    extends Composer<_$OfflinkDatabase, $BlockedPeersTableTable> {
+  $$BlockedPeersTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get nodeId =>
+      $composableBuilder(column: $table.nodeId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get blockedAt =>
+      $composableBuilder(column: $table.blockedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get reason =>
+      $composableBuilder(column: $table.reason, builder: (column) => column);
+}
+
+class $$BlockedPeersTableTableTableManager
+    extends
+        RootTableManager<
+          _$OfflinkDatabase,
+          $BlockedPeersTableTable,
+          BlockedPeersTableData,
+          $$BlockedPeersTableTableFilterComposer,
+          $$BlockedPeersTableTableOrderingComposer,
+          $$BlockedPeersTableTableAnnotationComposer,
+          $$BlockedPeersTableTableCreateCompanionBuilder,
+          $$BlockedPeersTableTableUpdateCompanionBuilder,
+          (
+            BlockedPeersTableData,
+            BaseReferences<
+              _$OfflinkDatabase,
+              $BlockedPeersTableTable,
+              BlockedPeersTableData
+            >,
+          ),
+          BlockedPeersTableData,
+          PrefetchHooks Function()
+        > {
+  $$BlockedPeersTableTableTableManager(
+    _$OfflinkDatabase db,
+    $BlockedPeersTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BlockedPeersTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BlockedPeersTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BlockedPeersTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> nodeId = const Value.absent(),
+                Value<DateTime> blockedAt = const Value.absent(),
+                Value<String> reason = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BlockedPeersTableCompanion(
+                nodeId: nodeId,
+                blockedAt: blockedAt,
+                reason: reason,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String nodeId,
+                required DateTime blockedAt,
+                Value<String> reason = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BlockedPeersTableCompanion.insert(
+                nodeId: nodeId,
+                blockedAt: blockedAt,
+                reason: reason,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$BlockedPeersTableTable, BlockedPeersTableData>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$OfflinkDatabase,
+                    $BlockedPeersTableTable,
+                    BlockedPeersTableData
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$BlockedPeersTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$OfflinkDatabase,
+      $BlockedPeersTableTable,
+      BlockedPeersTableData,
+      $$BlockedPeersTableTableFilterComposer,
+      $$BlockedPeersTableTableOrderingComposer,
+      $$BlockedPeersTableTableAnnotationComposer,
+      $$BlockedPeersTableTableCreateCompanionBuilder,
+      $$BlockedPeersTableTableUpdateCompanionBuilder,
+      (
+        BlockedPeersTableData,
+        BaseReferences<
+          _$OfflinkDatabase,
+          $BlockedPeersTableTable,
+          BlockedPeersTableData
+        >,
+      ),
+      BlockedPeersTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$PeerTrustTableTableCreateCompanionBuilder =
+    PeerTrustTableCompanion Function({
+      required String peerNodeId,
+      required String peerPublicKey,
+      required String safetyFingerprint,
+      Value<String> trustStatus,
+      Value<DateTime?> verifiedAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$PeerTrustTableTableUpdateCompanionBuilder =
+    PeerTrustTableCompanion Function({
+      Value<String> peerNodeId,
+      Value<String> peerPublicKey,
+      Value<String> safetyFingerprint,
+      Value<String> trustStatus,
+      Value<DateTime?> verifiedAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$PeerTrustTableTableFilterComposer
+    extends Composer<_$OfflinkDatabase, $PeerTrustTableTable> {
+  $$PeerTrustTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get peerNodeId => $composableBuilder(
+    column: $table.peerNodeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get peerPublicKey => $composableBuilder(
+    column: $table.peerPublicKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get safetyFingerprint => $composableBuilder(
+    column: $table.safetyFingerprint,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get trustStatus => $composableBuilder(
+    column: $table.trustStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get verifiedAt => $composableBuilder(
+    column: $table.verifiedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PeerTrustTableTableOrderingComposer
+    extends Composer<_$OfflinkDatabase, $PeerTrustTableTable> {
+  $$PeerTrustTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get peerNodeId => $composableBuilder(
+    column: $table.peerNodeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get peerPublicKey => $composableBuilder(
+    column: $table.peerPublicKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get safetyFingerprint => $composableBuilder(
+    column: $table.safetyFingerprint,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get trustStatus => $composableBuilder(
+    column: $table.trustStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get verifiedAt => $composableBuilder(
+    column: $table.verifiedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PeerTrustTableTableAnnotationComposer
+    extends Composer<_$OfflinkDatabase, $PeerTrustTableTable> {
+  $$PeerTrustTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get peerNodeId => $composableBuilder(
+    column: $table.peerNodeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get peerPublicKey => $composableBuilder(
+    column: $table.peerPublicKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get safetyFingerprint => $composableBuilder(
+    column: $table.safetyFingerprint,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get trustStatus => $composableBuilder(
+    column: $table.trustStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get verifiedAt => $composableBuilder(
+    column: $table.verifiedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$PeerTrustTableTableTableManager
+    extends
+        RootTableManager<
+          _$OfflinkDatabase,
+          $PeerTrustTableTable,
+          PeerTrustTableData,
+          $$PeerTrustTableTableFilterComposer,
+          $$PeerTrustTableTableOrderingComposer,
+          $$PeerTrustTableTableAnnotationComposer,
+          $$PeerTrustTableTableCreateCompanionBuilder,
+          $$PeerTrustTableTableUpdateCompanionBuilder,
+          (
+            PeerTrustTableData,
+            BaseReferences<
+              _$OfflinkDatabase,
+              $PeerTrustTableTable,
+              PeerTrustTableData
+            >,
+          ),
+          PeerTrustTableData,
+          PrefetchHooks Function()
+        > {
+  $$PeerTrustTableTableTableManager(
+    _$OfflinkDatabase db,
+    $PeerTrustTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PeerTrustTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PeerTrustTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PeerTrustTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> peerNodeId = const Value.absent(),
+                Value<String> peerPublicKey = const Value.absent(),
+                Value<String> safetyFingerprint = const Value.absent(),
+                Value<String> trustStatus = const Value.absent(),
+                Value<DateTime?> verifiedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PeerTrustTableCompanion(
+                peerNodeId: peerNodeId,
+                peerPublicKey: peerPublicKey,
+                safetyFingerprint: safetyFingerprint,
+                trustStatus: trustStatus,
+                verifiedAt: verifiedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String peerNodeId,
+                required String peerPublicKey,
+                required String safetyFingerprint,
+                Value<String> trustStatus = const Value.absent(),
+                Value<DateTime?> verifiedAt = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PeerTrustTableCompanion.insert(
+                peerNodeId: peerNodeId,
+                peerPublicKey: peerPublicKey,
+                safetyFingerprint: safetyFingerprint,
+                trustStatus: trustStatus,
+                verifiedAt: verifiedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PeerTrustTableTable, PeerTrustTableData>(table),
+                  BaseReferences<
+                    _$OfflinkDatabase,
+                    $PeerTrustTableTable,
+                    PeerTrustTableData
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PeerTrustTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$OfflinkDatabase,
+      $PeerTrustTableTable,
+      PeerTrustTableData,
+      $$PeerTrustTableTableFilterComposer,
+      $$PeerTrustTableTableOrderingComposer,
+      $$PeerTrustTableTableAnnotationComposer,
+      $$PeerTrustTableTableCreateCompanionBuilder,
+      $$PeerTrustTableTableUpdateCompanionBuilder,
+      (
+        PeerTrustTableData,
+        BaseReferences<
+          _$OfflinkDatabase,
+          $PeerTrustTableTable,
+          PeerTrustTableData
+        >,
+      ),
+      PeerTrustTableData,
+      PrefetchHooks Function()
+    >;
 
 class $OfflinkDatabaseManager {
   final _$OfflinkDatabase _db;
@@ -4193,4 +5341,8 @@ class $OfflinkDatabaseManager {
       $$GroupsTableTableTableManager(_db, _db.groupsTable);
   $$GroupMembersTableTableTableManager get groupMembersTable =>
       $$GroupMembersTableTableTableManager(_db, _db.groupMembersTable);
+  $$BlockedPeersTableTableTableManager get blockedPeersTable =>
+      $$BlockedPeersTableTableTableManager(_db, _db.blockedPeersTable);
+  $$PeerTrustTableTableTableManager get peerTrustTable =>
+      $$PeerTrustTableTableTableManager(_db, _db.peerTrustTable);
 }

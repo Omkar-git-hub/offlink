@@ -14,6 +14,7 @@ import '../protocol/group_membership_payload.dart';
 import '../protocol/offlink_message_type.dart';
 import '../protocol/offlink_packet.dart';
 import '../protocol/packet_transport.dart';
+import '../security/peer_security_repository.dart';
 import 'group.dart';
 import 'group_member.dart';
 import 'group_repository.dart';
@@ -28,12 +29,14 @@ class GroupMessageService {
     MessageRepository? messageRepository,
     ConversationRepository? conversationRepository,
     SecureSessionService? secureSessionService,
+    PeerSecurityRepository? peerSecurityRepository,
   }) : _packetTransport = packetTransport,
        _identityManager = identityManager,
        _groupRepository = groupRepository,
        _messageRepository = messageRepository,
        _conversationRepository = conversationRepository,
-       _secureSessionService = secureSessionService {
+       _secureSessionService = secureSessionService,
+       _peerSecurityRepository = peerSecurityRepository {
     _subscription = _packetTransport.incomingPackets.listen(
       _handleIncomingPacket,
     );
@@ -45,6 +48,7 @@ class GroupMessageService {
   final MessageRepository? _messageRepository;
   final ConversationRepository? _conversationRepository;
   final SecureSessionService? _secureSessionService;
+  final PeerSecurityRepository? _peerSecurityRepository;
 
   final StreamController<ChatMessage> _incomingGroupMessagesController =
       StreamController<ChatMessage>.broadcast();
@@ -425,6 +429,12 @@ class GroupMessageService {
   }
 
   Future<void> _handleIncomingPacket(OfflinkPacket packet) async {
+    // Security check: Drop all packets from locally blocked peers.
+    final peerSec = _peerSecurityRepository;
+    if (peerSec != null && await peerSec.isPeerBlocked(packet.senderNodeId)) {
+      return;
+    }
+
     // 1. Process ACKs for group messages
     if (packet.messageType == OfflinkMessageType.acknowledgement) {
       final ackPacketId = packet.payload;

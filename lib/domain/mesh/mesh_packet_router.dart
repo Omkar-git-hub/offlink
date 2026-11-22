@@ -6,8 +6,11 @@ import '../protocol/offlink_message_type.dart';
 import '../protocol/offlink_packet.dart';
 import '../protocol/packet_transport.dart';
 import '../queue/store_and_forward_manager.dart';
+import '../security/flood_rate_limiter.dart';
 import 'routing_table.dart';
 import 'seen_message_cache.dart';
+
+typedef IsPeerBlockedPredicate = FutureOr<bool> Function(String nodeId);
 
 class MeshPacketRouter implements PacketTransport {
   MeshPacketRouter({
@@ -18,6 +21,8 @@ class MeshPacketRouter implements PacketTransport {
     List<String> Function()? getConnectedPeerIds,
     this.defaultTtl = 4,
     StoreAndForwardManager? storeAndForwardManager,
+    this.isPeerBlocked,
+    this.floodRateLimiter,
   }) : _transport = transport,
        _getLocalNodeId = getLocalNodeId,
        _seenCache = seenCache ?? SeenMessageCache(),
@@ -36,6 +41,8 @@ class MeshPacketRouter implements PacketTransport {
   final List<String> Function()? _getConnectedPeerIds;
   final int defaultTtl;
   StoreAndForwardManager? storeAndForwardManager;
+  final IsPeerBlockedPredicate? isPeerBlocked;
+  final FloodRateLimiter? floodRateLimiter;
 
   final StreamController<OfflinkPacket> _inboundPackets =
       StreamController<OfflinkPacket>.broadcast();
@@ -93,7 +100,24 @@ class MeshPacketRouter implements PacketTransport {
     OfflinkPacket packet, {
     String? fromPeerId,
   }) async {
-    // 1. Deduplication check: drop if already seen to prevent routing loops.
+    // 0. Security check: drop packet if sender or immediate hop is blocked.
+    if (isPeerBlocked != null) {
+      if (await isPeerBlocked!(packet.senderNodeId) ||
+          (fromPeerId != null && await isPeerBlocked!(fromPeerId))) {
+        _droppedPackets.add(packet);
+        return;
+      }
+    }
+
+    // 1. Abuse control: rate limit inbound packet flooding.
+    if (floodRateLimiter != null) {
+      if (!floodRateLimiter!.allowPacket(packet.senderNodeId)) {
+        _droppedPackets.add(packet);
+        return;
+      }
+    }
+
+    // 2. Deduplication check: drop if already seen to prevent routing loops.
     if (!_seenCache.markIfUnseen(packet.messageId)) {
       _droppedPackets.add(packet);
       return;
@@ -101,7 +125,7 @@ class MeshPacketRouter implements PacketTransport {
 
     final localNodeId = _getLocalNodeId();
 
-    // 2. Route learning: record path back to sender if valid.
+    // 3. Route learning: record path back to sender if valid.
     if (packet.senderNodeId.isNotEmpty && packet.senderNodeId != localNodeId) {
       final hops = defaultTtl >= packet.ttl ? (defaultTtl - packet.ttl + 1) : 1;
       final nextHop =
@@ -119,7 +143,7 @@ class MeshPacketRouter implements PacketTransport {
       );
     }
 
-    // 3. Destination evaluation:
+    // 4. Destination evaluation:
     if (packet.messageType == OfflinkMessageType.acknowledgement) {
       await storeAndForwardManager?.onAckReceived(packet.payload);
     }
@@ -137,7 +161,7 @@ class MeshPacketRouter implements PacketTransport {
       return;
     }
 
-    // 4. Relay forwarding: this node is an intermediate relay.
+    // 5. Relay forwarding: this node is an intermediate relay.
     if (packet.ttl <= 1) {
       // TTL expired, drop packet to prevent infinite circulation.
       _droppedPackets.add(packet);
@@ -154,6 +178,13 @@ class MeshPacketRouter implements PacketTransport {
     final forwarded = packet.copyWith(ttl: packet.ttl - 1);
     _forwardedPackets.add(forwarded);
 
+    // Security check: do not relay packets to blocked destination
+    if (isPeerBlocked != null &&
+        await isPeerBlocked!(forwarded.recipientNodeId)) {
+      _droppedPackets.add(forwarded);
+      return;
+    }
+
     // Determine target peer:
     final knownRoute = _routingTable.getRoute(forwarded.recipientNodeId);
     final activeNeighbors = connectedPeerIds;
@@ -161,15 +192,26 @@ class MeshPacketRouter implements PacketTransport {
     var deliveredOrFlooded = false;
     if (knownRoute != null &&
         activeNeighbors.contains(knownRoute.nextHopPeerId)) {
-      // Forward directly to next hop
-      try {
-        await _transport.sendPacket(
-          peerId: knownRoute.nextHopPeerId,
-          packet: forwarded,
-        );
-        deliveredOrFlooded = true;
-      } catch (_) {
-        // Fallback to flood if direct link fails
+      final isNextHopBlocked =
+          isPeerBlocked != null &&
+          await isPeerBlocked!(knownRoute.nextHopPeerId);
+      if (!isNextHopBlocked) {
+        // Forward directly to next hop
+        try {
+          await _transport.sendPacket(
+            peerId: knownRoute.nextHopPeerId,
+            packet: forwarded,
+          );
+          deliveredOrFlooded = true;
+        } catch (_) {
+          // Fallback to flood if direct link fails
+          deliveredOrFlooded = await _floodPacket(
+            forwarded,
+            excludePeerId: fromPeerId ?? knownRoute.nextHopPeerId,
+          );
+        }
+      } else {
+        // Known next hop is blocked; fall back to flood excluding it
         deliveredOrFlooded = await _floodPacket(
           forwarded,
           excludePeerId: fromPeerId ?? knownRoute.nextHopPeerId,
@@ -216,6 +258,9 @@ class MeshPacketRouter implements PacketTransport {
     var sentToAny = false;
     for (final peerId in neighbors) {
       if (peerId == excludePeerId || peerId == packet.senderNodeId) {
+        continue;
+      }
+      if (isPeerBlocked != null && await isPeerBlocked!(peerId)) {
         continue;
       }
       try {

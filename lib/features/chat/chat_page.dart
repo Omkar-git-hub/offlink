@@ -10,8 +10,11 @@ import '../../domain/messaging/chat_message.dart';
 import '../../domain/messaging/direct_message_service.dart';
 import '../../domain/messaging/message_repository.dart';
 import '../../domain/messaging/message_service.dart';
+import '../../domain/security/peer_security_repository.dart';
+import '../../domain/security/trust_status.dart';
 import '../location/location_bubble.dart';
 import '../location/location_sharing_sheet.dart';
+import 'safety_fingerprint_dialog.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({
@@ -20,6 +23,7 @@ class ChatPage extends StatefulWidget {
     required this.messageService,
     this.messageRepository,
     this.locationService,
+    this.securityRepository,
     this.isConnected = true,
   });
 
@@ -27,6 +31,7 @@ class ChatPage extends StatefulWidget {
   final MessageService messageService;
   final MessageRepository? messageRepository;
   final LocationService? locationService;
+  final PeerSecurityRepository? securityRepository;
   final bool isConnected;
 
   @override
@@ -42,6 +47,17 @@ class _ChatPageState extends State<ChatPage> {
   StreamSubscription<ChatMessage>? _locationSubscription;
   StreamSubscription<List<LiveLocationSession>>? _activeSessionsSubscription;
   bool _isSending = false;
+  bool _isPeerBlocked = false;
+  PeerTrust? _peerTrust;
+
+  PeerSecurityRepository? get _effectiveSecurityRepository {
+    if (widget.securityRepository != null) return widget.securityRepository;
+    if (widget.messageService is DirectMessageService) {
+      return (widget.messageService as DirectMessageService)
+          .peerSecurityRepository;
+    }
+    return null;
+  }
 
   @override
   void initState() {
@@ -65,6 +81,8 @@ class _ChatPageState extends State<ChatPage> {
       _loadPersistedHistory();
     }
 
+    _loadSecurityStatus();
+
     if (widget.messageService is DirectMessageService && widget.isConnected) {
       final directService = widget.messageService as DirectMessageService;
       if (!directService.hasSecureSession(widget.peer.peerId)) {
@@ -74,6 +92,109 @@ class _ChatPageState extends State<ChatPage> {
         );
       }
     }
+  }
+
+  Future<void> _loadSecurityStatus() async {
+    final repo = _effectiveSecurityRepository;
+    if (repo == null) return;
+    final blocked = await repo.isPeerBlocked(widget.peer.peerId);
+    final trust = await repo.getPeerTrust(widget.peer.peerId);
+    if (mounted) {
+      setState(() {
+        _isPeerBlocked = blocked;
+        _peerTrust = trust;
+      });
+    }
+  }
+
+  Future<void> _toggleBlockPeer() async {
+    final repo = _effectiveSecurityRepository;
+    if (repo == null) return;
+
+    if (_isPeerBlocked) {
+      await repo.unblockPeer(widget.peer.peerId);
+      if (mounted) {
+        setState(() => _isPeerBlocked = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${widget.peer.displayName} unblocked.')),
+        );
+      }
+    } else {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('Block ${widget.peer.displayName}?'),
+          content: const Text(
+            'You will no longer receive messages or connection requests from this peer, and packets from them will be discarded.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Block'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        await repo.blockPeer(widget.peer.peerId);
+        if (mounted) {
+          setState(() => _isPeerBlocked = true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${widget.peer.displayName} blocked.')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _openSafetyDialog() async {
+    final repo = _effectiveSecurityRepository;
+    if (repo == null) return;
+
+    String localKey = '';
+    String peerKey = _peerTrust?.peerPublicKey ?? '';
+
+    if (widget.messageService is DirectMessageService) {
+      final direct = widget.messageService as DirectMessageService;
+      localKey = direct.identityManager.currentIdentity?.publicKey ?? '';
+      final session = direct.secureSessionService?.getSession(
+        widget.peer.peerId,
+      );
+      if (session != null) {
+        peerKey = session.peerIdentityPublicKey;
+      }
+    }
+
+    if (peerKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Establish an encrypted session first to verify safety fingerprint.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => SafetyFingerprintDialog(
+        peerNodeId: widget.peer.peerId,
+        peerDisplayName: widget.peer.displayName,
+        localPublicKeyHex: localKey,
+        peerPublicKeyHex: peerKey,
+        securityRepository: repo,
+        initialTrust: _peerTrust,
+      ),
+    );
+
+    _loadSecurityStatus();
   }
 
   Future<void> _loadPersistedHistory() async {
@@ -125,7 +246,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<void> _sendMessage() async {
-    if (_isSending) {
+    if (_isSending || _isPeerBlocked) {
       return;
     }
 
@@ -213,11 +334,23 @@ class _ChatPageState extends State<ChatPage> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              widget.peer.displayName.isNotEmpty
-                  ? widget.peer.displayName
-                  : 'Offlink User',
-              style: const TextStyle(fontSize: 18),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    widget.peer.displayName.isNotEmpty
+                        ? widget.peer.displayName
+                        : 'Offlink User',
+                    style: const TextStyle(fontSize: 18),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (_peerTrust?.isVerified == true) ...[
+                  const SizedBox(width: 6),
+                  const Icon(Icons.verified, size: 16, color: Colors.green),
+                ],
+              ],
             ),
             Row(
               children: [
@@ -250,10 +383,107 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ],
         ),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'Security & Options',
+            icon: const Icon(Icons.shield_outlined),
+            onSelected: (value) {
+              if (value == 'safety') {
+                _openSafetyDialog();
+              } else if (value == 'block') {
+                _toggleBlockPeer();
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'safety',
+                child: Row(
+                  children: [
+                    Icon(Icons.fingerprint, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('Safety Fingerprint')),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'block',
+                child: Row(
+                  children: [
+                    Icon(
+                      _isPeerBlocked ? Icons.lock_open : Icons.block,
+                      color: _isPeerBlocked ? Colors.green : Colors.red,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _isPeerBlocked ? 'Unblock Peer' : 'Block Peer',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
           children: [
+            if (_isPeerBlocked)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                color: Colors.red.withAlpha(40),
+                child: Row(
+                  children: [
+                    const Icon(Icons.block, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'You have blocked this peer. Incoming and outgoing packets are disabled.',
+                        style: TextStyle(
+                          color: Colors.red.shade900,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_peerTrust?.isMismatched == true)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                color: Colors.amber.withAlpha(60),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.amber,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Security Alert: Peer identity key has changed! Verify fingerprint before communicating.',
+                        style: TextStyle(
+                          color: Colors.brown.shade900,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (widget.locationService?.isLiveLocationActive(
                   widget.peer.peerId,
                 ) ==
@@ -457,24 +687,29 @@ class _ChatPageState extends State<ChatPage> {
               icon: const Icon(Icons.location_on_outlined),
               tooltip: 'Share Location',
               color: theme.colorScheme.primary,
-              onPressed: () {
-                LocationSharingSheet.show(
-                  context: context,
-                  locationService: widget.locationService!,
-                  targetId: widget.peer.peerId,
-                  targetName: widget.peer.displayName,
-                  isGroup: false,
-                );
-              },
+              onPressed: _isPeerBlocked
+                  ? null
+                  : () {
+                      LocationSharingSheet.show(
+                        context: context,
+                        locationService: widget.locationService!,
+                        targetId: widget.peer.peerId,
+                        targetName: widget.peer.displayName,
+                        isGroup: false,
+                      );
+                    },
             ),
             const SizedBox(width: 4),
           ],
           Expanded(
             child: TextField(
               controller: _textController,
+              enabled: !_isPeerBlocked,
               textCapitalization: TextCapitalization.sentences,
               decoration: InputDecoration(
-                hintText: 'Type an offline message...',
+                hintText: _isPeerBlocked
+                    ? 'Peer is blocked'
+                    : 'Type an offline message...',
                 filled: true,
                 fillColor: theme.colorScheme.surfaceContainerHighest,
                 contentPadding: const EdgeInsets.symmetric(
@@ -492,7 +727,7 @@ class _ChatPageState extends State<ChatPage> {
           const SizedBox(width: 8),
           IconButton.filled(
             tooltip: 'Send message',
-            onPressed: _isSending ? null : _sendMessage,
+            onPressed: (_isSending || _isPeerBlocked) ? null : _sendMessage,
             icon: _isSending
                 ? const SizedBox(
                     width: 20,
