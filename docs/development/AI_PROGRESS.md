@@ -31,7 +31,7 @@
   - `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built successfully).
 
 ## Status
-- **Status**: READY FOR PR / MERGE REVIEW
+- **Status**: PR #21 OPEN — ALL CI CHECKS PASSED — AWAITING USER REVIEW & MERGE
 
 ## Completed Work
 1. **Module 1 Merged into main**: PR #12 merged (`6d44f44`).
@@ -53,6 +53,8 @@
     - Integrated with `AppLifecycleCoordinator`, `HomePage`, and `main.dart`.
     - Added comprehensive unit tests for adaptive discovery, power coordinator, and idle timer elimination.
     - Updated `docs/product/BATTERY.md` and recorded `DECISION-012` in `docs/development/AI_DECISIONS.md`.
+    - Pull Request #21 created: https://github.com/Omkar-git-hub/offlink/pull/21.
+    - GitHub Actions CI workflow passed (`Flutter CI` completed in 5m41s).
 
 ## Tests Run & Results
 - `dart format --output=none --set-exit-if-changed .`: PASS (0 differences across 160 files)
@@ -63,13 +65,13 @@
   - `test/unit/battery/idle_timer_elimination_test.dart` (5 tests)
   - All existing 272 unit, widget, and lifecycle tests passing.
 - `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk`)
+- GitHub Actions CI: PASS (job 137314653886 on PR #21 passed all steps)
 
 ## Known Failures & Unresolved Issues
 - None.
 
 ## Exact Next Action
-1. Stage and commit changes to `feature/battery-optimization`.
-2. Push branch to GitHub.
-3. Open pull request targeting `main`.
-4. Monitor CI workflow run.
-5. Await user confirmation for merge into `main`.
+1. User reviews and manually merges PR #21 into `main` (never auto-merge).
+2. Switch to `main` and pull latest changes: `git checkout main && git pull origin main`.
+3. Verify baseline test suite on `main`.
+4. Proceed to the next module per roadmap and guidelines.
