@@ -5,10 +5,12 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'tables/blocked_peers_table.dart';
 import 'tables/conversations_table.dart';
 import 'tables/group_members_table.dart';
 import 'tables/groups_table.dart';
 import 'tables/messages_table.dart';
+import 'tables/peer_trust_table.dart';
 import 'tables/queued_packets_table.dart';
 
 part 'offlink_database.g.dart';
@@ -21,6 +23,8 @@ part 'offlink_database.g.dart';
     QueuedPacketsTable,
     GroupsTable,
     GroupMembersTable,
+    BlockedPeersTable,
+    PeerTrustTable,
   ],
 )
 class OfflinkDatabase extends _$OfflinkDatabase {
@@ -30,7 +34,7 @@ class OfflinkDatabase extends _$OfflinkDatabase {
   OfflinkDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -45,6 +49,10 @@ class OfflinkDatabase extends _$OfflinkDatabase {
         if (from < 3) {
           await m.createTable(groupsTable);
           await m.createTable(groupMembersTable);
+        }
+        if (from < 4) {
+          await m.createTable(blockedPeersTable);
+          await m.createTable(peerTrustTable);
         }
       },
       beforeOpen: (details) async {

@@ -43,6 +43,7 @@ class ConnectionRecoveryCoordinator {
     Duration? minAttemptSpacing,
     this.backgroundMaxAttempts = 3,
     this.backgroundInitialDelay = const Duration(seconds: 5),
+    this.isPeerBlocked,
     Random? random,
   }) : _connection = connection,
        minAttemptSpacing =
@@ -60,6 +61,7 @@ class ConnectionRecoveryCoordinator {
   final Duration minAttemptSpacing;
   final int backgroundMaxAttempts;
   final Duration backgroundInitialDelay;
+  final bool Function(String peerId)? isPeerBlocked;
   final Random _random;
 
   final Map<String, BlePeer> _trackedPeers = <String, BlePeer>{};
@@ -108,6 +110,11 @@ class ConnectionRecoveryCoordinator {
   }
 
   void onPeerDisconnected(String peerId) {
+    if (isPeerBlocked != null && isPeerBlocked!(peerId)) {
+      untrackPeer(peerId);
+      return;
+    }
+
     final peer = _trackedPeers[peerId];
     if (peer == null) return;
     if (_retryTimers.containsKey(peerId) ||
@@ -119,6 +126,11 @@ class ConnectionRecoveryCoordinator {
   }
 
   void scheduleReconnect(BlePeer peer) {
+    if (isPeerBlocked != null && isPeerBlocked!(peer.peerId)) {
+      untrackPeer(peer.peerId);
+      return;
+    }
+
     if (!_isBluetoothEnabled) {
       _eventController.add(
         RecoveryEvent(peerId: peer.peerId, type: RecoveryEventType.paused),

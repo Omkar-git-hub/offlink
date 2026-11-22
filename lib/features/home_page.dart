@@ -23,6 +23,8 @@ import '../domain/messaging/message_service.dart';
 import '../domain/location/location_service.dart';
 import '../domain/protocol/offlink_message_type.dart';
 import '../domain/protocol/offlink_packet.dart';
+import '../domain/security/peer_security_repository.dart';
+import '../domain/security/trust_status.dart';
 import 'chat/chat_page.dart';
 import 'chat/group_chat_page.dart';
 
@@ -42,6 +44,7 @@ class HomePage extends StatefulWidget {
     this.groupMessageService,
     this.groupRepository,
     this.locationService,
+    this.securityRepository,
   });
 
   final PhoneBleConnection bleConnection;
@@ -57,6 +60,7 @@ class HomePage extends StatefulWidget {
   final GroupMessageService? groupMessageService;
   final GroupRepository? groupRepository;
   final LocationService? locationService;
+  final PeerSecurityRepository? securityRepository;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -68,10 +72,12 @@ class _HomePageState extends State<HomePage> {
   StreamSubscription<BleDiscoveryEvent>? _discoverySubscription;
   StreamSubscription<dynamic>? _connectionSubscription;
   StreamSubscription<dynamic>? _incomingPacketSubscription;
+  StreamSubscription<List<BlockedPeer>>? _blockedPeersSubscription;
 
   final List<BlePeer> _nearbyPeers = [];
   final Set<String> _connectingPeerIds = {};
   final Set<String> _connectedPeerIds = {};
+  final Set<String> _blockedPeerIds = {};
 
   OfflinkPacket? _lastReceivedPacket;
 
@@ -87,6 +93,16 @@ class _HomePageState extends State<HomePage> {
     super.initState();
 
     widget.lifecycleCoordinator?.initialize();
+
+    _blockedPeersSubscription = widget.securityRepository
+        ?.watchBlockedPeers()
+        .listen((blocked) {
+          if (!mounted || _isDisposed) return;
+          setState(() {
+            _blockedPeerIds.clear();
+            _blockedPeerIds.addAll(blocked.map((p) => p.nodeId));
+          });
+        });
 
     _discovery = widget.discovery ?? PhoneBleDiscovery();
 
@@ -320,6 +336,7 @@ class _HomePageState extends State<HomePage> {
           messageService: messageService,
           messageRepository: widget.messageRepository,
           locationService: widget.locationService,
+          securityRepository: widget.securityRepository,
           isConnected: _connectedPeerIds.contains(peer.peerId),
         ),
       ),
@@ -549,6 +566,7 @@ class _HomePageState extends State<HomePage> {
     _discoverySubscription?.cancel();
     _connectionSubscription?.cancel();
     _incomingPacketSubscription?.cancel();
+    _blockedPeersSubscription?.cancel();
 
     if (widget.discovery == null) {
       final discovery = _discovery;
@@ -562,12 +580,106 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  Future<void> _showBlockedPeersSheet() async {
+    final repo = widget.securityRepository;
+    if (repo == null) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return StreamBuilder<List<BlockedPeer>>(
+          stream: repo.watchBlockedPeers(),
+          builder: (context, snapshot) {
+            final blockedList = snapshot.data ?? [];
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.block, size: 24),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Blocked Peers',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.of(sheetContext).pop(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(),
+                    if (blockedList.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Center(child: Text('No blocked peers')),
+                      )
+                    else
+                      Flexible(
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: blockedList.length,
+                          itemBuilder: (context, index) {
+                            final peer = blockedList[index];
+                            final shortId = peer.nodeId.length > 12
+                                ? '${peer.nodeId.substring(0, 12)}...'
+                                : peer.nodeId;
+                            return ListTile(
+                              leading: const CircleAvatar(
+                                child: Icon(Icons.person_off),
+                              ),
+                              title: Text(shortId),
+                              subtitle: Text(peer.reason),
+                              trailing: TextButton(
+                                onPressed: () async {
+                                  await repo.unblockPeer(peer.nodeId);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(
+                                      this.context,
+                                    ).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Unblocked $shortId'),
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: const Text('Unblock'),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Offlink'),
         actions: [
+          if (widget.securityRepository != null)
+            IconButton(
+              tooltip: 'Blocked Peers',
+              onPressed: _showBlockedPeersSheet,
+              icon: const Icon(Icons.block),
+            ),
           IconButton(
             tooltip: 'Refresh nearby users',
             onPressed: _refreshNearbyPeers,
@@ -798,6 +910,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildNearbySection() {
+    final visiblePeers = _nearbyPeers
+        .where((peer) => !_blockedPeerIds.contains(peer.peerId))
+        .toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -806,10 +922,10 @@ class _HomePageState extends State<HomePage> {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 12),
-        if (_nearbyPeers.isEmpty)
+        if (visiblePeers.isEmpty)
           _buildEmptyNearbyState()
         else
-          ..._nearbyPeers.map(_buildPeerTile),
+          ...visiblePeers.map(_buildPeerTile),
       ],
     );
   }

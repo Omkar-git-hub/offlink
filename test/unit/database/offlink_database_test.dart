@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:offlink/data/database/offlink_database.dart';
@@ -66,9 +67,52 @@ void main() {
       },
     );
 
-    test('schema version is 3', () {
-      expect(db.schemaVersion, 3);
+    test('schema version is 4', () {
+      expect(db.schemaVersion, 4);
     });
+
+    test(
+      'supports insertion and retrieval in blockedPeersTable and peerTrustTable',
+      () async {
+        final now = DateTime.utc(2026, 11, 23, 1, 0);
+
+        // Blocked peer
+        await db
+            .into(db.blockedPeersTable)
+            .insert(
+              BlockedPeersTableCompanion.insert(
+                nodeId: 'node-malicious-999',
+                blockedAt: now,
+                reason: const Value('flood attack'),
+              ),
+            );
+
+        final blocked = await db.select(db.blockedPeersTable).get();
+        expect(blocked, hasLength(1));
+        expect(blocked.first.nodeId, equals('node-malicious-999'));
+        expect(blocked.first.reason, equals('flood attack'));
+
+        // Peer trust
+        await db
+            .into(db.peerTrustTable)
+            .insert(
+              PeerTrustTableCompanion.insert(
+                peerNodeId: 'node-alice-1234',
+                peerPublicKey: 'pubkey-hex-001',
+                safetyFingerprint:
+                    '12345 67890 12345 67890 12345 67890 12345 67890 12345 67890 12345 67890',
+                trustStatus: const Value('verified'),
+                verifiedAt: Value(now),
+                updatedAt: now,
+              ),
+            );
+
+        final trust = await db.select(db.peerTrustTable).get();
+        expect(trust, hasLength(1));
+        expect(trust.first.peerNodeId, equals('node-alice-1234'));
+        expect(trust.first.trustStatus, equals('verified'));
+      },
+    );
 
     test(
       'enforces foreign key cascading for group members when group is deleted',

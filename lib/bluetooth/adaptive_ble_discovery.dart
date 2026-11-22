@@ -22,10 +22,13 @@ class AdaptiveBleDiscovery implements BleDiscovery {
   AdaptiveBleDiscovery({
     required BleDiscovery underlying,
     BatteryOptimizationPolicy? initialPolicy,
+    bool Function(String peerId)? isPeerBlocked,
   }) : _underlying = underlying,
-       _policy = initialPolicy ?? BatteryOptimizationPolicy.active();
+       _policy = initialPolicy ?? BatteryOptimizationPolicy.active(),
+       _isPeerBlocked = isPeerBlocked;
 
   final BleDiscovery _underlying;
+  final bool Function(String peerId)? _isPeerBlocked;
   BatteryOptimizationPolicy _policy;
 
   Timer? _cycleTimer;
@@ -74,10 +77,21 @@ class AdaptiveBleDiscovery implements BleDiscovery {
   }
 
   @override
-  Stream<BlePeer> get discoveredPeers => _underlying.discoveredPeers;
+  Stream<BlePeer> get discoveredPeers {
+    if (_isPeerBlocked == null) return _underlying.discoveredPeers;
+    return _underlying.discoveredPeers.where((p) => !_isPeerBlocked(p.peerId));
+  }
 
   @override
-  Stream<BleDiscoveryEvent> get discoveryEvents => _underlying.discoveryEvents;
+  Stream<BleDiscoveryEvent> get discoveryEvents {
+    if (_isPeerBlocked == null) return _underlying.discoveryEvents;
+    return _underlying.discoveryEvents.where((e) {
+      if (e.type == BleDiscoveryEventType.discovered) {
+        return !_isPeerBlocked(e.peer.peerId);
+      }
+      return true;
+    });
+  }
 
   @override
   Future<void> startScanning() async {

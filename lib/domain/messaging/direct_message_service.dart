@@ -9,6 +9,9 @@ import '../identity/identity_manager.dart';
 import '../protocol/offlink_message_type.dart';
 import '../protocol/offlink_packet.dart';
 import '../protocol/packet_transport.dart';
+import '../security/peer_security_repository.dart';
+import '../security/safety_fingerprint_generator.dart';
+import '../security/trust_status.dart';
 import 'chat_message.dart';
 import 'conversation.dart';
 import 'conversation_repository.dart';
@@ -22,11 +25,13 @@ class DirectMessageService implements MessageService {
     MessageRepository? messageRepository,
     ConversationRepository? conversationRepository,
     SecureSessionService? secureSessionService,
+    PeerSecurityRepository? peerSecurityRepository,
   }) : _packetTransport = packetTransport,
        _identityManager = identityManager,
        _messageRepository = messageRepository,
        _conversationRepository = conversationRepository,
-       _secureSessionService = secureSessionService {
+       _secureSessionService = secureSessionService,
+       _peerSecurityRepository = peerSecurityRepository {
     _subscription = _packetTransport.incomingPackets.listen(
       _handleIncomingPacket,
     );
@@ -37,6 +42,11 @@ class DirectMessageService implements MessageService {
   final MessageRepository? _messageRepository;
   final ConversationRepository? _conversationRepository;
   final SecureSessionService? _secureSessionService;
+  final PeerSecurityRepository? _peerSecurityRepository;
+
+  PeerSecurityRepository? get peerSecurityRepository => _peerSecurityRepository;
+  IdentityManager get identityManager => _identityManager;
+  SecureSessionService? get secureSessionService => _secureSessionService;
 
   final StreamController<ChatMessage> _incomingMessagesController =
       StreamController<ChatMessage>.broadcast();
@@ -79,6 +89,13 @@ class DirectMessageService implements MessageService {
   }
 
   Future<void> _handleIncomingPacket(OfflinkPacket packet) async {
+    // Security check: Drop all packets from locally blocked peers.
+    if (_peerSecurityRepository != null) {
+      if (await _peerSecurityRepository.isPeerBlocked(packet.senderNodeId)) {
+        return;
+      }
+    }
+
     // Ignore group and location packets; handled by their respective services
     if (packet.messageType == OfflinkMessageType.groupMessage ||
         packet.messageType == OfflinkMessageType.groupMembership ||
@@ -87,11 +104,28 @@ class DirectMessageService implements MessageService {
     }
 
     if (packet.messageType == OfflinkMessageType.handshakeInit) {
-      if (_secureSessionService == null) {
-        return;
-      }
       try {
         final initPayload = HandshakeInitPayload.decode(packet.payload);
+
+        await _recordPeerTrust(
+          initPayload.senderNodeId,
+          initPayload.senderIdentityPublicKey,
+        );
+
+        if (_secureSessionService == null) {
+          return;
+        }
+
+        // If peer trust is mismatched (MITM detected), reject handshake response
+        if (_peerSecurityRepository != null) {
+          final trust = await _peerSecurityRepository.getPeerTrust(
+            initPayload.senderNodeId,
+          );
+          if (trust != null && trust.isMismatched) {
+            return;
+          }
+        }
+
         final responsePayload = await _secureSessionService.handleHandshakeInit(
           initPayload,
         );
@@ -119,11 +153,27 @@ class DirectMessageService implements MessageService {
     }
 
     if (packet.messageType == OfflinkMessageType.handshakeResponse) {
-      if (_secureSessionService == null) {
-        return;
-      }
       try {
         final responsePayload = HandshakeResponsePayload.decode(packet.payload);
+
+        await _recordPeerTrust(
+          responsePayload.senderNodeId,
+          responsePayload.senderIdentityPublicKey,
+        );
+
+        if (_secureSessionService == null) {
+          return;
+        }
+
+        if (_peerSecurityRepository != null) {
+          final trust = await _peerSecurityRepository.getPeerTrust(
+            responsePayload.senderNodeId,
+          );
+          if (trust != null && trust.isMismatched) {
+            return;
+          }
+        }
+
         await _secureSessionService.handleHandshakeResponse(responsePayload);
       } catch (_) {
         return;
@@ -255,6 +305,14 @@ class DirectMessageService implements MessageService {
       throw ArgumentError('Message content cannot be empty.');
     }
 
+    if (_peerSecurityRepository != null) {
+      if (await _peerSecurityRepository.isPeerBlocked(recipientNodeId)) {
+        throw StateError(
+          'Cannot send message to blocked peer $recipientNodeId.',
+        );
+      }
+    }
+
     final localNodeId =
         _identityManager.currentIdentity?.nodeId ?? 'local-node';
     final messageId = 'msg-${DateTime.now().microsecondsSinceEpoch}';
@@ -376,6 +434,58 @@ class DirectMessageService implements MessageService {
     }
 
     await _packetTransport.sendPacket(peerId: targetPeer, packet: packet);
+  }
+
+  Future<void> _recordPeerTrust(
+    String peerNodeId,
+    String peerPublicKeyHex,
+  ) async {
+    if (_peerSecurityRepository == null) return;
+    try {
+      final localPublicKey = _identityManager.currentIdentity?.publicKey ?? '';
+      if (localPublicKey.isEmpty || peerPublicKeyHex.isEmpty) return;
+
+      final generator = const SafetyFingerprintGenerator();
+      final fingerprint = await generator.generateNumericFingerprint(
+        localPublicKeyHex: localPublicKey,
+        peerPublicKeyHex: peerPublicKeyHex,
+      );
+
+      final existing = await _peerSecurityRepository.getPeerTrust(peerNodeId);
+      final now = DateTime.now().toUtc();
+
+      if (existing != null) {
+        if (existing.peerPublicKey.toLowerCase() !=
+            peerPublicKeyHex.toLowerCase()) {
+          // KEY MISMATCH! Active MITM or identity re-key detected!
+          await _peerSecurityRepository.saveOrUpdatePeerTrust(
+            existing.copyWith(
+              peerPublicKey: peerPublicKeyHex,
+              safetyFingerprint: fingerprint,
+              trustStatus: TrustStatus.mismatched,
+              updatedAt: now,
+            ),
+          );
+        } else {
+          // Key unchanged; preserve verification status
+          await _peerSecurityRepository.saveOrUpdatePeerTrust(
+            existing.copyWith(updatedAt: now),
+          );
+        }
+      } else {
+        await _peerSecurityRepository.saveOrUpdatePeerTrust(
+          PeerTrust(
+            peerNodeId: peerNodeId,
+            peerPublicKey: peerPublicKeyHex,
+            safetyFingerprint: fingerprint,
+            trustStatus: TrustStatus.unverified,
+            updatedAt: now,
+          ),
+        );
+      }
+    } catch (_) {
+      // Do not fail handshake if trust recording encounters an issue
+    }
   }
 
   @override

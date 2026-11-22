@@ -12,6 +12,7 @@ import 'crypto/session/secure_session_service.dart';
 import 'data/database/drift_conversation_repository.dart';
 import 'data/database/drift_group_repository.dart';
 import 'data/database/drift_message_repository.dart';
+import 'data/database/drift_peer_security_repository.dart';
 import 'data/database/drift_store_and_forward_repository.dart';
 import 'data/database/offlink_database.dart';
 import 'data/identity/flutter_secure_identity_storage.dart';
@@ -33,6 +34,8 @@ import 'domain/messaging/direct_message_service.dart';
 import 'domain/messaging/message_repository.dart';
 import 'domain/messaging/message_service.dart';
 import 'domain/queue/store_and_forward_manager.dart';
+import 'domain/security/flood_rate_limiter.dart';
+import 'domain/security/peer_security_repository.dart';
 import 'features/home_page.dart';
 import 'features/onboarding/onboarding_page.dart';
 
@@ -71,17 +74,21 @@ Future<void> main() async {
     peripheralChannel: peripheralChannel,
   );
 
-  final meshPacketRouter = MeshPacketRouter(
-    transport: packetTransport,
-    getLocalNodeId: () =>
-        identityManager.currentIdentity?.nodeId ?? 'local-node',
-  );
-
   final database = OfflinkDatabase();
   final messageRepository = DriftMessageRepository(database);
   final conversationRepository = DriftConversationRepository(database);
   final storeAndForwardRepository = DriftStoreAndForwardRepository(database);
   final groupRepository = DriftGroupRepository(database);
+  final securityRepository = DriftPeerSecurityRepository(database);
+  final floodRateLimiter = FloodRateLimiter();
+
+  final meshPacketRouter = MeshPacketRouter(
+    transport: packetTransport,
+    getLocalNodeId: () =>
+        identityManager.currentIdentity?.nodeId ?? 'local-node',
+    isPeerBlocked: securityRepository.isPeerBlocked,
+    floodRateLimiter: floodRateLimiter,
+  );
 
   final storeAndForwardManager = StoreAndForwardManager(
     repository: storeAndForwardRepository,
@@ -105,6 +112,7 @@ Future<void> main() async {
     messageRepository: messageRepository,
     conversationRepository: conversationRepository,
     secureSessionService: secureSessionService,
+    peerSecurityRepository: securityRepository,
   );
 
   final groupMessageService = GroupMessageService(
@@ -114,6 +122,7 @@ Future<void> main() async {
     messageRepository: messageRepository,
     conversationRepository: conversationRepository,
     secureSessionService: secureSessionService,
+    peerSecurityRepository: securityRepository,
   );
 
   final locationProvider = const GeolocatorLocationProvider();
@@ -130,7 +139,10 @@ Future<void> main() async {
   final backgroundService = MethodChannelBackgroundService();
   final lifecycleManager = AppLifecycleManager();
   final phoneDiscovery = PhoneBleDiscovery();
-  final adaptiveDiscovery = AdaptiveBleDiscovery(underlying: phoneDiscovery);
+  final adaptiveDiscovery = AdaptiveBleDiscovery(
+    underlying: phoneDiscovery,
+    isPeerBlocked: securityRepository.isPeerBlockedSync,
+  );
 
   final powerCoordinator = AdaptivePowerCoordinator(
     lifecycleManager: lifecycleManager,
@@ -141,6 +153,7 @@ Future<void> main() async {
 
   final connectionRecovery = ConnectionRecoveryCoordinator(
     connection: bleConnection,
+    isPeerBlocked: securityRepository.isPeerBlockedSync,
   );
   final pendingMessageRecovery = PendingMessageRecoveryService(
     messageService: messageService,
@@ -174,6 +187,7 @@ Future<void> main() async {
       groupMessageService: groupMessageService,
       groupRepository: groupRepository,
       locationService: locationService,
+      securityRepository: securityRepository,
       database: database,
     ),
   );
@@ -197,6 +211,7 @@ class OfflinkApp extends StatefulWidget {
     this.groupMessageService,
     this.groupRepository,
     this.locationService,
+    this.securityRepository,
     this.database,
   });
 
@@ -215,6 +230,7 @@ class OfflinkApp extends StatefulWidget {
   final GroupMessageService? groupMessageService;
   final GroupRepository? groupRepository;
   final LocationService? locationService;
+  final PeerSecurityRepository? securityRepository;
   final OfflinkDatabase? database;
 
   @override
@@ -254,6 +270,10 @@ class _OfflinkAppState extends State<OfflinkApp> {
     widget.meshRouter?.dispose();
     widget.packetTransport.dispose();
     widget.bleConnection.dispose();
+    final secRepo = widget.securityRepository;
+    if (secRepo is DriftPeerSecurityRepository) {
+      secRepo.dispose();
+    }
     widget.database?.close();
     super.dispose();
   }
@@ -282,6 +302,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
               groupMessageService: widget.groupMessageService,
               groupRepository: widget.groupRepository,
               locationService: widget.locationService,
+              securityRepository: widget.securityRepository,
             )
           : OnboardingPage(onContinue: _createIdentity),
     );

@@ -16,9 +16,51 @@ import 'package:offlink/domain/messaging/message_repository.dart';
 import 'package:offlink/domain/messaging/message_service.dart';
 import 'package:offlink/domain/protocol/offlink_packet.dart';
 import 'package:offlink/domain/protocol/packet_transport.dart';
+import 'package:offlink/domain/security/peer_security_repository.dart';
+import 'package:offlink/domain/security/trust_status.dart';
 import 'package:offlink/features/chat/chat_page.dart';
 
 import '../../unit/identity/fakes/fake_secure_key_storage.dart';
+
+class _MockSecurityRepo implements PeerSecurityRepository {
+  final Set<String> blocked = {};
+  PeerTrust? trust;
+
+  @override
+  Future<void> blockPeer(String nodeId, {String reason = 'manual'}) async =>
+      blocked.add(nodeId);
+
+  @override
+  Future<void> unblockPeer(String nodeId) async => blocked.remove(nodeId);
+
+  @override
+  Future<bool> isPeerBlocked(String nodeId) async => blocked.contains(nodeId);
+
+  @override
+  bool isPeerBlockedSync(String nodeId) => blocked.contains(nodeId);
+
+  @override
+  Future<List<BlockedPeer>> getBlockedPeers() async => [];
+
+  @override
+  Stream<List<BlockedPeer>> watchBlockedPeers() => const Stream.empty();
+
+  @override
+  Future<PeerTrust?> getPeerTrust(String peerNodeId) async => trust;
+
+  @override
+  Future<void> saveOrUpdatePeerTrust(PeerTrust newTrust) async {
+    trust = newTrust;
+  }
+
+  @override
+  Future<void> setPeerVerificationStatus(
+    String peerNodeId,
+    TrustStatus status,
+  ) async {
+    trust = trust?.copyWith(trustStatus: status);
+  }
+}
 
 class MockMessageService implements MessageService {
   final StreamController<ChatMessage> _incomingController =
@@ -433,6 +475,133 @@ void main() {
         expect(find.byIcon(Icons.lock), findsOneWidget);
 
         directService.dispose();
+      },
+    );
+
+    testWidgets(
+      'ChatPage displays security menu and handles peer blocking flow',
+      (tester) async {
+        final mockRepo = _MockSecurityRepo();
+
+        await tester.pumpWidget(
+          createTestApp(
+            ChatPage(
+              peer: testPeer,
+              messageService: messageService,
+              securityRepository: mockRepo,
+              isConnected: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Shield icon is displayed
+        final shieldButton = find.byIcon(Icons.shield_outlined);
+        expect(shieldButton, findsOneWidget);
+
+        // 2. Open security popup menu
+        await tester.tap(shieldButton);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Safety Fingerprint'), findsOneWidget);
+        expect(find.text('Block Peer'), findsOneWidget);
+
+        // 3. Tap Block Peer -> opens confirmation dialog
+        await tester.tap(find.text('Block Peer'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Block Bob?'), findsOneWidget);
+        expect(
+          find.textContaining('You will no longer receive messages'),
+          findsOneWidget,
+        );
+
+        // 4. Confirm blocking
+        await tester.tap(find.widgetWithText(FilledButton, 'Block'));
+        await tester.pumpAndSettle();
+
+        // 5. Block banner is displayed
+        expect(
+          find.textContaining('You have blocked this peer'),
+          findsOneWidget,
+        );
+        expect(mockRepo.blocked, contains(testPeer.peerId));
+
+        // 6. Input field is disabled
+        final textField = tester.widget<TextField>(find.byType(TextField));
+        expect(textField.enabled, isFalse);
+
+        // 7. Open menu again and unblock
+        await tester.tap(shieldButton);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Unblock Peer'), findsOneWidget);
+        await tester.tap(find.text('Unblock Peer'));
+        await tester.pumpAndSettle();
+
+        expect(mockRepo.blocked, isNot(contains(testPeer.peerId)));
+        expect(find.textContaining('You have blocked this peer'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'ChatPage displays verified badge in title when peer is verified',
+      (tester) async {
+        final mockRepo = _MockSecurityRepo();
+        mockRepo.trust = PeerTrust(
+          peerNodeId: testPeer.peerId,
+          peerPublicKey: 'test-pubkey',
+          safetyFingerprint:
+              '12345 67890 12345 67890 12345 67890 12345 67890 12345 67890 12345 67890',
+          trustStatus: TrustStatus.verified,
+          verifiedAt: DateTime.now().toUtc(),
+          updatedAt: DateTime.now().toUtc(),
+        );
+
+        await tester.pumpWidget(
+          createTestApp(
+            ChatPage(
+              peer: testPeer,
+              messageService: messageService,
+              securityRepository: mockRepo,
+              isConnected: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byIcon(Icons.verified), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'ChatPage displays security alert banner when peer key is mismatched',
+      (tester) async {
+        final mockRepo = _MockSecurityRepo();
+        mockRepo.trust = PeerTrust(
+          peerNodeId: testPeer.peerId,
+          peerPublicKey: 'changed-key',
+          safetyFingerprint: '00000',
+          trustStatus: TrustStatus.mismatched,
+          updatedAt: DateTime.now().toUtc(),
+        );
+
+        await tester.pumpWidget(
+          createTestApp(
+            ChatPage(
+              peer: testPeer,
+              messageService: messageService,
+              securityRepository: mockRepo,
+              isConnected: true,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Security Alert: Peer identity key has changed!'),
+          findsOneWidget,
+        );
       },
     );
   });
