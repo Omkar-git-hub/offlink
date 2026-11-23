@@ -51,11 +51,18 @@ class DirectMessageService implements MessageService {
   final StreamController<ChatMessage> _incomingMessagesController =
       StreamController<ChatMessage>.broadcast();
 
+  final StreamController<({String peerId, String username})>
+  _peerIdentityUpdatesController =
+      StreamController<({String peerId, String username})>.broadcast();
+
   StreamSubscription<OfflinkPacket>? _subscription;
 
   @override
   Stream<ChatMessage> get incomingMessages =>
       _incomingMessagesController.stream;
+
+  Stream<({String peerId, String username})> get peerIdentityUpdates =>
+      _peerIdentityUpdatesController.stream;
 
   bool hasSecureSession(String peerNodeId) {
     return _secureSessionService?.hasSession(peerNodeId) ?? false;
@@ -71,8 +78,10 @@ class DirectMessageService implements MessageService {
 
     final localNodeId =
         _identityManager.currentIdentity?.nodeId ?? 'local-node';
+    final localUsername = _identityManager.currentIdentity?.username;
     final handshakeInit = await _secureSessionService.createHandshakeInit(
       recipientNodeId,
+      senderUsername: localUsername,
     );
 
     final packet = OfflinkPacket(
@@ -112,6 +121,14 @@ class DirectMessageService implements MessageService {
           initPayload.senderIdentityPublicKey,
         );
 
+        if (initPayload.senderUsername != null &&
+            initPayload.senderUsername!.trim().isNotEmpty) {
+          await _updatePeerDisplayName(
+            initPayload.senderNodeId,
+            initPayload.senderUsername!.trim(),
+          );
+        }
+
         if (_secureSessionService == null) {
           return;
         }
@@ -126,8 +143,10 @@ class DirectMessageService implements MessageService {
           }
         }
 
+        final localUsername = _identityManager.currentIdentity?.username;
         final responsePayload = await _secureSessionService.handleHandshakeInit(
           initPayload,
+          senderUsername: localUsername,
         );
 
         final localNodeId =
@@ -160,6 +179,14 @@ class DirectMessageService implements MessageService {
           responsePayload.senderNodeId,
           responsePayload.senderIdentityPublicKey,
         );
+
+        if (responsePayload.senderUsername != null &&
+            responsePayload.senderUsername!.trim().isNotEmpty) {
+          await _updatePeerDisplayName(
+            responsePayload.senderNodeId,
+            responsePayload.senderUsername!.trim(),
+          );
+        }
 
         if (_secureSessionService == null) {
           return;
@@ -488,10 +515,35 @@ class DirectMessageService implements MessageService {
     }
   }
 
+  Future<void> _updatePeerDisplayName(
+    String peerNodeId,
+    String username,
+  ) async {
+    if (_conversationRepository != null) {
+      final existing = await _conversationRepository.getConversationByPeer(
+        peerNodeId,
+      );
+      final conversation = Conversation(
+        id: existing?.id ?? peerNodeId,
+        peerNodeId: peerNodeId,
+        peerDisplayName: username,
+        lastMessage: existing?.lastMessage,
+        unreadCount: existing?.unreadCount ?? 0,
+        updatedAt: existing?.updatedAt ?? DateTime.now().toUtc(),
+      );
+      await _conversationRepository.upsertConversation(conversation);
+    }
+    _peerIdentityUpdatesController.add((
+      peerId: peerNodeId,
+      username: username,
+    ));
+  }
+
   @override
   void dispose() {
     _subscription?.cancel();
     _subscription = null;
     _incomingMessagesController.close();
+    _peerIdentityUpdatesController.close();
   }
 }

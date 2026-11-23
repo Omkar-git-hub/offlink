@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_ble_peripheral/flutter_ble_peripheral.dart';
@@ -11,14 +12,30 @@ abstract interface class BleAdvertiser {
 }
 
 class FlutterBleAdvertiser implements BleAdvertiser {
-  const FlutterBleAdvertiser();
+  const FlutterBleAdvertiser({this.getUsername});
+
+  final String? Function()? getUsername;
 
   @override
   Future<void> start() {
+    final rawUsername = getUsername?.call()?.trim();
+    final Uint8List? nameBytes = (rawUsername != null && rawUsername.isNotEmpty)
+        ? Uint8List.fromList(utf8.encode(rawUsername))
+        : null;
+
     return FlutterBlePeripheral().start(
       advertiseData: AdvertiseDataCore(
         serviceUuid: OfflinkBleService.serviceUuid,
+        localName: rawUsername,
       ),
+      androidSettings: nameBytes != null
+          ? AndroidAdvertiseSettings(
+              advertiseResponseData: AndroidAdvertiseData(
+                manufacturerId: OfflinkBleService.manufacturerId,
+                manufacturerData: nameBytes,
+              ),
+            )
+          : null,
       gattServer: GattServerSettings(
         serviceUuid: OfflinkBleService.serviceUuid,
         txCharacteristicUuid: OfflinkBleService.txCharacteristicUuid,

@@ -82,8 +82,9 @@ class SecureSessionService {
   }
 
   Future<HandshakeInitPayload> createHandshakeInit(
-    String recipientNodeId,
-  ) async {
+    String recipientNodeId, {
+    String? senderUsername,
+  }) async {
     final localIdentityKeyPair = await _identityKeyService.loadPrivateKey();
     if (localIdentityKeyPair == null) {
       throw StateError('Local identity keypair is not available.');
@@ -111,6 +112,7 @@ class SecureSessionService {
       ephemeralPublicKey: ephemeralBase64,
       timestamp: now,
       signature: '',
+      senderUsername: senderUsername,
     );
 
     final signature = await _ed25519.sign(
@@ -124,12 +126,14 @@ class SecureSessionService {
       ephemeralPublicKey: ephemeralBase64,
       timestamp: now,
       signature: base64Encode(signature.bytes),
+      senderUsername: senderUsername,
     );
   }
 
   Future<HandshakeResponsePayload> handleHandshakeInit(
-    HandshakeInitPayload initPayload,
-  ) async {
+    HandshakeInitPayload initPayload, {
+    String? senderUsername,
+  }) async {
     final localIdentityKeyPair = await _identityKeyService.loadPrivateKey();
     if (localIdentityKeyPair == null) {
       throw StateError('Local identity keypair is not available.');
@@ -210,6 +214,7 @@ class SecureSessionService {
       peerEphemeralPublicKey: initPayload.ephemeralPublicKey,
       timestamp: now,
       signature: '',
+      senderUsername: senderUsername,
     );
 
     final signature = await _ed25519.sign(
@@ -225,6 +230,7 @@ class SecureSessionService {
       peerEphemeralPublicKey: initPayload.ephemeralPublicKey,
       timestamp: now,
       signature: base64Encode(signature.bytes),
+      senderUsername: senderUsername,
     );
   }
 

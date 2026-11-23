@@ -51,30 +51,55 @@ class FlutterBluePlusPacketChannel implements BlePacketChannel {
       // Ignore if MTU negotiation is not supported on this device/platform.
     }
 
-    final services = await _device.discoverServices();
-
     BluetoothService? offlinkService;
+    const maxAttempts = 3;
 
-    for (final service in services) {
-      if (service.uuid.toString().toLowerCase() ==
-          OfflinkBleService.serviceUuid.toLowerCase()) {
-        offlinkService = service;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      List<BluetoothService> services = [];
+      try {
+        services = await _device.discoverServices();
+      } catch (_) {
+        // Transient discovery error on some Android versions.
+      }
+
+      for (final service in services) {
+        if (_matchesUuid(service.uuid, OfflinkBleService.serviceUuid)) {
+          offlinkService = service;
+          break;
+        }
+      }
+
+      if (offlinkService != null) {
         break;
+      }
+
+      if (attempt < maxAttempts) {
+        // Attempt to clear Android GATT cache if possible to force re-discovery
+        try {
+          await _device.clearGattCache();
+        } catch (_) {
+          // Non-Android platforms or unsupported devices ignore this.
+        }
+        await Future<void>.delayed(Duration(milliseconds: 300 * attempt));
       }
     }
 
     if (offlinkService == null) {
-      throw StateError('Offlink BLE service was not found.');
+      throw OfflinkBleServiceNotFoundException(_device.remoteId.str);
     }
 
     for (final characteristic in offlinkService.characteristics) {
-      final uuid = characteristic.uuid.toString().toLowerCase();
-
-      if (uuid == OfflinkBleService.txCharacteristicUuid.toLowerCase()) {
+      if (_matchesUuid(
+        characteristic.uuid,
+        OfflinkBleService.txCharacteristicUuid,
+      )) {
         _txCharacteristic = characteristic;
       }
 
-      if (uuid == OfflinkBleService.rxCharacteristicUuid.toLowerCase()) {
+      if (_matchesUuid(
+        characteristic.uuid,
+        OfflinkBleService.rxCharacteristicUuid,
+      )) {
         _rxCharacteristic = characteristic;
       }
     }
@@ -133,4 +158,21 @@ class FlutterBluePlusPacketChannel implements BlePacketChannel {
     _rxCharacteristic = null;
     _initialized = false;
   }
+
+  static bool _matchesUuid(Guid guid, String targetUuid) {
+    final target = Guid(targetUuid);
+    return guid == target ||
+        guid.str128.toLowerCase() == target.str128.toLowerCase();
+  }
+}
+
+/// Thrown when the required Offlink GATT service cannot be located on a connected peer device.
+class OfflinkBleServiceNotFoundException implements Exception {
+  const OfflinkBleServiceNotFoundException(this.deviceId);
+
+  final String deviceId;
+
+  @override
+  String toString() =>
+      'Offlink BLE service was not found on device $deviceId. Ensure Offlink is open and advertising on the other device.';
 }

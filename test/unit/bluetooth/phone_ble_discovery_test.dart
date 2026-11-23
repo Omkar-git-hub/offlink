@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:offlink/bluetooth/ble_discovery_event.dart';
 import 'package:offlink/bluetooth/ble_models.dart';
+import 'package:offlink/bluetooth/offlink_ble_service.dart';
 import 'package:offlink/bluetooth/phone_ble_discovery.dart';
 
 import 'fakes/fake_ble_advertiser.dart';
@@ -191,10 +192,7 @@ void main() {
         advertiser: advertiser,
       );
 
-      expect(
-        discovery.isOfflinkService('00000000-0000-0000-0000-000000000000'),
-        isTrue,
-      );
+      expect(discovery.isOfflinkService(OfflinkBleService.serviceUuid), isTrue);
 
       await discovery.dispose();
       await scanner.dispose();
@@ -296,7 +294,7 @@ void main() {
 
     expect(
       scanner.startedWithServices.first.toString().toLowerCase(),
-      '00000000-0000-0000-0000-000000000000',
+      OfflinkBleService.serviceUuid.toLowerCase(),
     );
 
     await discovery.dispose();

@@ -57,15 +57,15 @@ Idle
 Logical service:
 
 ```text
-Offlink Service (00000000-0000-0000-0000-000000000000)
+Offlink Service (0f110001-4000-4000-8000-000000000000)
   |
-  +-- Control characteristic (00000000-0000-0000-0000-000000000001)
+  +-- Control characteristic (0f110002-4000-4000-8000-000000000000)
   |     handshake / capabilities / control
   |
-  +-- TX characteristic (00000000-0000-0000-0000-000000000002)
+  +-- TX characteristic (0f110003-4000-4000-8000-000000000000)
   |     peripheral -> central notifications
   |
-  +-- RX characteristic (00000000-0000-0000-0000-000000000003)
+  +-- RX characteristic (0f110004-4000-4000-8000-000000000000)
         central -> peripheral writes
 ```
 

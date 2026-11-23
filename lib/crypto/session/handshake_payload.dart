@@ -7,6 +7,7 @@ class HandshakeInitPayload {
     required this.ephemeralPublicKey,
     required this.timestamp,
     required this.signature,
+    this.senderUsername,
   });
 
   final String senderNodeId;
@@ -14,6 +15,7 @@ class HandshakeInitPayload {
   final String ephemeralPublicKey;
   final DateTime timestamp;
   final String signature;
+  final String? senderUsername;
 
   List<int> toSignableBytes() {
     return utf8.encode(
@@ -28,6 +30,7 @@ class HandshakeInitPayload {
       'ephemeralPublicKey': ephemeralPublicKey,
       'timestamp': timestamp.toUtc().toIso8601String(),
       'signature': signature,
+      if (senderUsername != null) 'senderUsername': senderUsername,
     };
   }
 
@@ -52,6 +55,7 @@ class HandshakeInitPayload {
       ephemeralPublicKey: map['ephemeralPublicKey'] as String,
       timestamp: DateTime.parse(map['timestamp'] as String).toUtc(),
       signature: map['signature'] as String,
+      senderUsername: map['senderUsername'] as String?,
     );
   }
 
@@ -75,6 +79,7 @@ class HandshakeResponsePayload {
     required this.peerEphemeralPublicKey,
     required this.timestamp,
     required this.signature,
+    this.senderUsername,
   });
 
   final String senderNodeId;
@@ -84,6 +89,7 @@ class HandshakeResponsePayload {
   final String peerEphemeralPublicKey;
   final DateTime timestamp;
   final String signature;
+  final String? senderUsername;
 
   List<int> toSignableBytes() {
     return utf8.encode(
@@ -100,6 +106,7 @@ class HandshakeResponsePayload {
       'peerEphemeralPublicKey': peerEphemeralPublicKey,
       'timestamp': timestamp.toUtc().toIso8601String(),
       'signature': signature,
+      if (senderUsername != null) 'senderUsername': senderUsername,
     };
   }
 
@@ -128,6 +135,7 @@ class HandshakeResponsePayload {
       peerEphemeralPublicKey: map['peerEphemeralPublicKey'] as String,
       timestamp: DateTime.parse(map['timestamp'] as String).toUtc(),
       signature: map['signature'] as String,
+      senderUsername: map['senderUsername'] as String?,
     );
   }
 

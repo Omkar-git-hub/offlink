@@ -19,6 +19,8 @@ class BleScanResultMapper {
     return BlePeer(
       peerId: scanData.peerId,
       displayName: scanData.displayName,
+      deviceModel: scanData.deviceModel,
+      username: scanData.username,
       signalStrength: scanData.signalStrength,
     );
   }

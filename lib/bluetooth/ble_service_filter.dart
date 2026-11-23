@@ -4,7 +4,13 @@ class BleServiceFilter {
   const BleServiceFilter();
 
   bool isOfflinkService(String serviceUuid) {
-    return serviceUuid.toLowerCase() ==
-        OfflinkBleService.serviceUuid.toLowerCase();
+    if (serviceUuid.isEmpty) {
+      return false;
+    }
+    return _normalize(serviceUuid) == _normalize(OfflinkBleService.serviceUuid);
+  }
+
+  static String _normalize(String uuid) {
+    return uuid.replaceAll('-', '').toLowerCase();
   }
 }
