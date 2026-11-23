@@ -90,6 +90,19 @@ jobs:
             echo "signed_type=Android Production Keystore" >> $GITHUB_OUTPUT
           else
             echo "::warning ::OFFLINK_KEYSTORE_BASE64 secret not set. Using debug fallback signing for pre-release."
+            mkdir -p ~/.android ~/.config/.android
+            if [ ! -f ~/.android/debug.keystore ] && [ ! -f ~/.config/.android/debug.keystore ]; then
+              keytool -genkeypair -v \
+                -keystore ~/.android/debug.keystore \
+                -alias androiddebugkey \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -storepass android \
+                -keypass android \
+                -dname "CN=Android Debug,O=Android,C=US"
+              cp -f ~/.android/debug.keystore ~/.config/.android/debug.keystore 2>/dev/null || true
+            fi
             echo "signed_type=Android Debug (Fallback Keystore)" >> $GITHUB_OUTPUT
           fi
 

@@ -34,20 +34,18 @@ android {
                 storePassword = keystorePassword
                 this.keyAlias = keyAlias
                 this.keyPassword = keyPassword
-            } else {
-                // Fallback to debug signing config when production keystore environment is not configured
-                val debugConfig = signingConfigs.getByName("debug")
-                storeFile = debugConfig.storeFile
-                storePassword = debugConfig.storePassword
-                this.keyAlias = debugConfig.keyAlias
-                this.keyPassword = debugConfig.keyPassword
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            val keystorePath = System.getenv("OFFLINK_KEYSTORE_PATH")
+            if (!keystorePath.isNullOrEmpty() && file(keystorePath).exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
+            }
         }
     }
 }
