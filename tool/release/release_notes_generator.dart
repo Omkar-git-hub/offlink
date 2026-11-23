@@ -200,7 +200,6 @@ void main(List<String> args) {
     } else if (arg.startsWith('--prerelease=')) {
       isPreRelease =
           arg.substring('--prerelease='.length).toLowerCase() == 'true';
-
     } else if (arg.startsWith('--from-ref=')) {
       fromRef = arg.substring('--from-ref='.length);
     } else if (arg.startsWith('--to-ref=')) {
