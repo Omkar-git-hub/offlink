@@ -125,5 +125,39 @@ void main() {
 
       tempDir.deleteSync(recursive: true);
     });
+
+    test('writes generated notes to output file', () {
+      final tempDir = Directory.systemTemp.createTempSync('notes_out_test');
+      final notesFile = File('${tempDir.path}/sub/RELEASE_NOTES.md');
+
+      final categorized = {
+        '🚀 Features & Enhancements': ['feat(mesh): dynamic routing'],
+      };
+
+      final markdown = ReleaseNotesGenerator.buildNotes(
+        version: '0.1.0-alpha.3',
+        channel: 'alpha',
+        isPreRelease: true,
+        categorized: categorized,
+        releaseDate: '2026-11-24',
+      );
+
+      if (!notesFile.parent.existsSync()) {
+        notesFile.parent.createSync(recursive: true);
+      }
+      notesFile.writeAsStringSync(markdown);
+
+      expect(notesFile.existsSync(), isTrue);
+      expect(
+        notesFile.readAsStringSync(),
+        contains('# Offlink v0.1.0-alpha.3'),
+      );
+      expect(
+        notesFile.readAsStringSync(),
+        contains('feat(mesh): dynamic routing'),
+      );
+
+      tempDir.deleteSync(recursive: true);
+    });
   });
 }

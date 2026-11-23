@@ -242,7 +242,34 @@ This document records durable architectural, protocol, security, and compatibili
     - PR labels (`release:skip`, `no-release`, `skip-release`) and commit messages containing `[skip release]` or `[no release]` are parsed by `version_calculator.dart`. If present, release automation skips APK compilation and tagging gracefully.
   - **Idempotency & Retry Safety**:
     - Before building or publishing, the workflow verifies if the release or tag already exists. If an existing release is detected, creation is skipped to prevent duplicate conflicts or failure upon workflow re-runs.
-- **Status**: Implemented in `fix/ci-cd-protected-main-compatibility`.
+- **Status**: Implemented in `fix/ci-cd-protected-main-compatibility` (PR #25, merged).
+
+---
+
+## DECISION-016: Conventional PR Title-Driven Release Classification, Alpha Monotonic Progression, and Idempotent Retry Architecture
+- **Context**: Offlink requires a fully automatic release lifecycle where the maintainer's only routine manual action is `Review PR -> Merge PR`. In previous alpha releases, manual label dependence caused unclassified releases, and argument mismatches (`--output` vs `--output-file`) broke release notes generation. A simple, robust, convention-driven system was needed.
+- **Decision**:
+  - **Conventional PR Title Classification (`tool/release/pr_classifier.dart`)**:
+    - Pull Request titles directly determine release classification without requiring manual labels:
+      - `feat:`, `fix:`, `perf:` -> Triggers release (`alpha` iteration increment during Alpha; minor/patch in stable).
+      - `feat!:`, `fix!:` -> Triggers breaking release (increments minor version `0.2.0-alpha.1` in Alpha; major in stable).
+      - `docs:`, `test:`, `chore:`, `ci:`, `refactor:` -> No release (`should_release=false`).
+  - **Automated PR Title Validation in CI (`.github/workflows/ci.yml`)**:
+    - `Flutter CI` runs on `pull_request: types: [opened, edited, synchronize, reopened]`.
+    - Validates PR title convention using `dart run tool/release/pr_classifier.dart --validate-title=...`.
+    - If a PR title fails convention, CI fails immediately with clear formatting examples, guiding contributors before merge.
+  - **Alpha Monotonic Progression**:
+    - Standard feature/fix PR increments Alpha iteration (`0.1.0-alpha.2` -> `0.1.0-alpha.3`).
+    - Monotonically increasing Android `versionCode` ensures package updates install seamlessly on test devices.
+  - **Robust Release Notes Generation**:
+    - Fixed `--output=` and `--output-file=` CLI argument parsing in `release_notes_generator.dart`.
+    - Added guaranteed non-empty fallback in `release.yml` to prevent missing file errors.
+  - **Idempotent Retry & Asset Reconciliation**:
+    - Release workflows check both source repository (`offlink`) and distribution repository (`offlink-releases`).
+    - If a release already exists but assets were missing or partially uploaded, `uploadAssets` attaches assets with `--clobber` rather than failing.
+    - If all assets exist on both repositories, the workflow logs clean completion and exits 0.
+- **Status**: Implemented in `feature/automatic-pr-release-system`.
+
 
 
 

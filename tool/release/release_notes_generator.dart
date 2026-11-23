@@ -183,11 +183,20 @@ void main(List<String> args) {
   bool updateChangelog = false;
   String changelogPath = 'CHANGELOG.md';
 
+  String? prTitle = Platform.environment['PR_TITLE'];
+
   for (final arg in args) {
     if (arg.startsWith('--version=')) {
       version = arg.substring('--version='.length);
+    } else if (arg.startsWith('--tag=')) {
+      final tag = arg.substring('--tag='.length);
+      if (tag.startsWith('v')) {
+        version = tag.substring(1);
+      }
     } else if (arg.startsWith('--channel=')) {
       channel = arg.substring('--channel='.length);
+    } else if (arg.startsWith('--pr-title=')) {
+      prTitle = arg.substring('--pr-title='.length);
     } else if (arg.startsWith('--prerelease=')) {
       isPreRelease =
           arg.substring('--prerelease='.length).toLowerCase() == 'true';
@@ -195,6 +204,8 @@ void main(List<String> args) {
       fromRef = arg.substring('--from-ref='.length);
     } else if (arg.startsWith('--to-ref=')) {
       toRef = arg.substring('--to-ref='.length);
+    } else if (arg.startsWith('--output=')) {
+      outputFile = arg.substring('--output='.length);
     } else if (arg.startsWith('--output-file=')) {
       outputFile = arg.substring('--output-file='.length);
     } else if (arg == '--update-changelog') {
@@ -235,6 +246,13 @@ void main(List<String> args) {
     rawCommits = (logResult.stdout as String).split('\n');
   }
 
+  // If no commit history found between tags, but a PR title is provided, use it
+  if (rawCommits.every((c) => c.trim().isEmpty) &&
+      prTitle != null &&
+      prTitle.isNotEmpty) {
+    rawCommits = [prTitle];
+  }
+
   final categorized = ReleaseNotesGenerator.categorizeCommits(rawCommits);
   final markdown = ReleaseNotesGenerator.buildNotes(
     version: version,
@@ -244,7 +262,11 @@ void main(List<String> args) {
   );
 
   if (outputFile != null && outputFile.isNotEmpty) {
-    File(outputFile).writeAsStringSync(markdown);
+    final target = File(outputFile);
+    if (!target.parent.existsSync()) {
+      target.parent.createSync(recursive: true);
+    }
+    target.writeAsStringSync(markdown);
     stdout.writeln('Wrote release notes to $outputFile');
   } else {
     stdout.writeln(markdown);

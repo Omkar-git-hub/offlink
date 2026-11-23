@@ -72,7 +72,7 @@ Establish a production-grade, fully automated CI/CD and release pipeline for Off
 ---
 
 ## Protected-Main Branch Compatibility Fix (2026-11-24)
-- **Branch**: `fix/ci-cd-protected-main-compatibility`
+- **Branch**: `fix/ci-cd-protected-main-compatibility` (PR #25, merged)
 - **Issue**: GitHub Actions runner failed on step `Commit version bump and updated CHANGELOG to main` with error `GH013: Repository rule violations found for refs/heads/main` (changes must be made through a pull request; required check `Flutter CI` expected).
 - **Resolution**:
   1. Removed `git push origin main` and file commits from `.github/workflows/release.yml`.
@@ -81,4 +81,48 @@ Establish a production-grade, fully automated CI/CD and release pipeline for Off
   4. Made tag and release creation atomic using `gh release create <tag> --target $GITHUB_SHA`.
   5. Added idempotency guards to skip duplicate releases safely on retries.
   6. Verified 29/29 release unit tests passing, static analysis clean, and formatting clean.
+
+---
+
+## Fully Automatic PR-Based Release System (2026-11-24)
+- **Branch**: `feature/automatic-pr-release-system`
+- **Core Principle**: Maintainer's only routine manual action is **Review PR → Merge PR**. No manual version bumps, tagging, or release triggering required.
+
+### 1. Conventional PR Title Release Rules
+PR titles automatically drive release classification:
+
+| PR Title Prefix | Action | Alpha Version Effect | Stable Version Effect |
+|---|---|---|---|
+| `feat:` / `feat(...):` | **Release** | Increments alpha iteration (`0.1.0-alpha.2` -> `0.1.0-alpha.3`) | Increments minor version (`0.2.0`) |
+| `fix:` / `fix(...):` | **Release** | Increments alpha iteration (`0.1.0-alpha.2` -> `0.1.0-alpha.3`) | Increments patch version (`0.1.1`) |
+| `perf:` / `perf(...):` | **Release** | Increments alpha iteration (`0.1.0-alpha.2` -> `0.1.0-alpha.3`) | Increments patch version (`0.1.1`) |
+| `feat!:` / `fix!:` | **Breaking Release** | Increments minor version (`0.2.0-alpha.1`) | Increments major version (`1.0.0`) |
+| `docs:` / `docs(...):` | **No Release** | Release skipped (`should_release=false`) | Release skipped |
+| `test:` / `test(...):` | **No Release** | Release skipped (`should_release=false`) | Release skipped |
+| `chore:` / `chore(...):` | **No Release** | Release skipped (`should_release=false`) | Release skipped |
+| `ci:` / `ci(...):` | **No Release** | Release skipped (`should_release=false`) | Release skipped |
+| `refactor:` | **No Release** | Skipped unless breaking (`refactor!:`) or `[release]` token | Skipped unless breaking or `[release]` |
+
+### 2. CI PR Title Validation
+- Integrated `tool/release/pr_classifier.dart` into `.github/workflows/ci.yml`.
+- Runs on `pull_request: types: [opened, edited, synchronize, reopened]`.
+- Fails with explicit, actionable formatting guidance if a PR title does not conform to Conventional Commits.
+
+### 3. Release Notes Generation Fix
+- Fixed argument mismatch where `release.yml` passed `--output=RELEASE_NOTES.md` while `release_notes_generator.dart` previously expected `--output-file=`.
+- Updated `release_notes_generator.dart` to support both `--output=` and `--output-file=`, create parent directories recursively, and accept `--pr-title`.
+- Added a fail-safe fallback in `release.yml` ensuring `RELEASE_NOTES.md` is guaranteed to exist and be non-empty before release creation.
+
+### 4. Idempotent Retry & Asset Reconciliation
+- Enhanced `release.yml` and `publish_release.dart` with `uploadAssets` and asset presence verification.
+- If a release workflow fails or is retried after partial completion:
+  1. Checks if release exists on source repo (`Omkar-git-hub/offlink`); uploads missing assets with `--clobber`.
+  2. Checks if release exists on distribution repo (`Omkar-git-hub/offlink-releases`); reconciles metadata and uploads assets with `--clobber`.
+  3. If both releases and assets exist, cleanly skips duplicate work and exits 0.
+
+### 5. Automated Tooling & Test Coverage
+- Added `tool/release/pr_classifier.dart`.
+- Added unit tests in `test/unit/release/pr_classifier_test.dart` (15 tests).
+- Expanded `test/unit/release/version_calculator_test.dart` (50+ tests total across release suite).
+
 
