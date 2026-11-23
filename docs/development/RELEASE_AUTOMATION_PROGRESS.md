@@ -1,0 +1,69 @@
+# Release Automation Progress & Checkpoint
+
+## Objective
+Establish a production-grade, fully automated CI/CD and release pipeline for Offlink such that the maintainer's **only routine manual action** is reviewing and merging Pull Requests. Upon PR merge to `main`, automation handles version calculation, tagging, building, signing, verification, checksum generation, release note drafting, and deployment to the official distribution repository ([Omkar-git-hub/offlink-releases](https://github.com/Omkar-git-hub/offlink-releases)).
+
+---
+
+## Current Architecture & Status Baseline
+
+### Source Repository (`offlink`)
+- **URL**: [https://github.com/Omkar-git-hub/offlink](https://github.com/Omkar-git-hub/offlink)
+- **Branch**: `feature/automated-ci-cd-release-system` (branched from `main` at `c41b0df`)
+- **Modules Present**: Modules 1 through 11 fully merged.
+- **Test Suite**: 352/352 tests passing (100% pass rate: 324 core + 28 release automation tests).
+- **Static Analysis**: 0 issues (`flutter analyze`).
+- **Formatting**: 100% clean (`dart format`).
+- **Android Configuration**:
+  - `applicationId`: `io.github.omkar_git_hub.offlink` (migrated from placeholder `com.example.offlink`)
+  - `namespace`: `io.github.omkar_git_hub.offlink`
+  - `minSdk`: API 24 (Android 7.0)
+  - `targetSdk`: API 36 (Android 16)
+  - `compileSdk`: API 36
+- **Signing Configuration**:
+  - `release` signing config configured in `android/app/build.gradle.kts`. Reads environment variables (`OFFLINK_KEYSTORE_PATH`, etc.) with automatic fallback to debug keystore for development and PR verification.
+- **Workflows**:
+  - `.github/workflows/ci.yml`: Runs on PRs to `main` and pushes to `feature/**`. Validates secrets, dependencies, formatting, static analysis, unit tests, release APK build, and APK structure.
+  - `.github/workflows/release.yml`: Runs on PR merges to `main`. Determines PR release labels, calculates next semantic version, extracts release notes, signs APK, verifies integrity, tags repository, publishes to `offlink`, and synchronizes metadata and releases to `offlink-releases`.
+
+### Release / Distribution Repository (`offlink-releases`)
+- **URL**: [https://github.com/Omkar-git-hub/offlink-releases](https://github.com/Omkar-git-hub/offlink-releases)
+- **Branch**: `main`
+- **Current Live Release**: `v0.1.0-alpha.1` with `Offlink-0.1.0-alpha.1.apk` and `SHA256SUMS.txt`.
+- **Automated Synchronization**: Driven by `tool/release/sync_distribution_repo.dart` and `tool/release/publish_release.dart`.
+
+---
+
+## Phase Execution Roadmap
+
+| Phase | Description | Status |
+| :--- | :--- | :--- |
+| **Phase 0** | Audit & Checkpoint Baseline | **Completed** |
+| **Phase 1** | Release Foundations (App ID, Licensing Analysis, Semantic Versioning) | **Completed** |
+| **Phase 2** | Production CI Workflow Hardening (`ci.yml`) | **Completed** |
+| **Phase 3** | Merge-to-Release Automation Pipeline (`release.yml`) | **Completed** |
+| **Phase 4** | Distribution Repository Automated Publishing (`sync_distribution_repo.dart`) | **Completed** |
+| **Phase 5** | Production Signing Architecture & Secret Management | **Completed** |
+| **Phase 6** | Release Safety, Guardrails & Concurrency Control | **Completed** |
+| **Phase 7** | Automated Changelog & Release Notes Engine | **Completed** |
+| **Phase 8** | Automation & Pipeline Validation Testing | **In Progress** |
+| **Phase 9** | Production CI/CD Documentation & Bootstrap Guide (`AUTOMATED_RELEASE_PIPELINE.md`) | **Completed** |
+| **Phase 10** | Final Repository Verification & PR Creation | Pending |
+
+---
+
+## Tooling Suite (`tool/release/`)
+
+1. `version_calculator.dart` — Evaluates Git tags and PR labels (`release:major`, `release:minor`, `release:patch`, `release:alpha`, `release:beta`, `release:stable`), increments version, enforces tag collision avoidance, updates `pubspec.yaml`, and exports to `$GITHUB_OUTPUT`. Tested in `test/unit/release/version_calculator_test.dart` (13 tests).
+2. `release_notes_generator.dart` — Categorizes commit logs between releases into Keep-a-Changelog sections and writes Markdown notes. Tested in `test/unit/release/release_notes_generator_test.dart` (4 tests).
+3. `verify_release_apk.dart` — Computes SHA-256 hash, verifies package ID (`io.github.omkar_git_hub.offlink`), version, and signature. Tested in `test/unit/release/verify_release_apk_test.dart` (6 tests).
+4. `publish_release.dart` — Automates GitHub Release creation, idempotent publishing, and binary asset upload.
+5. `sync_distribution_repo.dart` — Updates `metadata/release-information.json`, `metadata/app-information.json`, `CHANGELOG.md`, and `RELEASES.md` in `offlink-releases`. Tested in `test/unit/release/sync_distribution_repo_test.dart` (5 tests).
+
+---
+
+## Decisions Log
+- **Application ID**: Permanent ID migrated to `io.github.omkar_git_hub.offlink` tying identity cryptographically to the author's verified GitHub namespace. All Kotlin source code, MethodChannel names, and test suites updated.
+- **Pure Dart Tooling**: All automation tools written in standard Dart for 100% portability, zero external runtime dependencies (no Python/Node requirement), and full unit test coverage using `flutter test`.
+- **Ephemeral Keystore Pattern**: Production keystore is reconstructed from base64 environment secret exclusively during CI execution and immediately removed in an `always()` post-action step.
+- **Fail-Safe Release Fallback**: If keystore secrets or `RELEASE_TOKEN` are not yet configured by the repository owner, the pipeline does not fail abruptly. Instead, it signs using debug fallback and logs actionable warnings directing the maintainer to `AUTOMATED_RELEASE_PIPELINE.md`.

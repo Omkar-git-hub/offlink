@@ -6,7 +6,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MethodChannelBackgroundService', () {
-    const channelName = 'com.example.offlink/background_service';
+    const channelName = 'io.github.omkar_git_hub.offlink/background_service';
     final List<MethodCall> log = <MethodCall>[];
     bool returnError = false;
     bool isRunningResponse = true;

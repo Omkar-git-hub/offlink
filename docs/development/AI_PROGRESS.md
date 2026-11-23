@@ -1,43 +1,36 @@
 # AI Progress & Execution Checkpoint
 
 ## Current Module & Feature Branch
-- **Module**: Module 11 — Security Hardening & Abuse Controls
-- **Branch**: `feature/security-hardening-abuse-controls`
+- **Module**: Phase 1 — Fully Automated CI/CD and Release System
+- **Branch**: `feature/automated-ci-cd-release-system`
 - **Target**: `main`
 
 ## Objective & Acceptance Criteria
-- Serverless Local Peer Blocking:
-  - Created `BlockedPeersTable` in Drift schema v4 (`nodeId`, `blockedAt`, `reason`) with migration support.
-  - Implemented `PeerSecurityRepository` and `DriftPeerSecurityRepository` with synchronous in-memory lookup (`isPeerBlockedSync`).
-  - Enforced lowest-level ingress packet discard in `MeshPacketRouter.handleIncomingPacket()` before crypto or DB operations.
-  - Enforced forwarding suppression for packets originating from or addressed to blocked peers.
-  - Silenced discovery events in `AdaptiveBleDiscovery` for blocked peers.
-  - Suppressed reconnection attempts in `ConnectionRecoveryCoordinator` for blocked peers.
-  - Prevented outgoing message initiation in `DirectMessageService.sendMessage()` and `GroupMessageService`.
-- Inbound Flood Protection & Sliding-Window Rate Limiting:
-  - Implemented `FloodRateLimiter` per `senderNodeId` (15 pkts / 3s sliding window).
-  - Escalated repeated threshold violations (>=3 strikes) to automatic 30s quarantine backoff.
-  - Self-healing memory pruning of inactive sender buckets.
-- Cryptographic Safety Fingerprints & MITM Detection:
-  - Created `PeerTrustTable` in Drift schema v4 (`peerNodeId`, `peerPublicKey`, `safetyFingerprint`, `trustStatus`, `verifiedAt`, `updatedAt`).
-  - Implemented `SafetyFingerprintGenerator` computing deterministic symmetric 60-digit SHA-256 fingerprints from lexicographically sorted public keys (`offlink-safety-v1:$k1:$k2`).
-  - Integrated public key verification in `DirectMessageService` handshake handling: automatically detects modified public keys for known node IDs, flags as `TrustStatus.mismatched`, and aborts encrypted session negotiation.
-- Security UI & User Verification Controls:
-  - Created `SafetyFingerprintDialog` rendering grouped 12x5 digit fingerprints with verify/unverify toggle.
-  - Added shield security action and verified badge (`Icons.verified`) in `ChatPage`.
-  - Added warning banner for `TrustStatus.mismatched` in `ChatPage`.
-  - Added blocked banner and disabled input bar in `ChatPage` when peer is blocked.
-  - Added blocked peers management modal bottom sheet in `HomePage` with one-tap unblock.
-- Protocol Fuzzing Suite:
-  - Added `test/unit/protocol/protocol_fuzz_test.dart` injecting mutated, truncated, corrupted, and oversized binary/JSON payloads into decoders and routers without crash or unhandled exception.
-- Verification Suite:
-  - 324/324 tests passing across entire repository (37 new tests added for Module 11).
-  - `dart format`: PASS (0 differences across all files).
-  - `flutter analyze`: PASS (0 issues found).
-  - `flutter build apk --debug`: In progress / verified.
+- Fully Automated Release Pipeline:
+  - Maintainer's sole routine manual action is reviewing and merging Pull Requests.
+  - Upon merge to `main`, `.github/workflows/release.yml` autonomously calculates semantic version, generates Keep-a-Changelog notes, updates `pubspec.yaml` and `CHANGELOG.md`, signs release APK, verifies integrity, tags repository, creates release on `offlink`, and synchronizes release metadata, docs, and assets to `offlink-releases`.
+- Application Identity Permanent Migration:
+  - Migrated from placeholder `com.example.offlink` to production ID `io.github.omkar_git_hub.offlink` in `build.gradle.kts`, Kotlin source tree, and `MethodChannel`.
+  - Android package directory cleanly transitioned to `android/app/src/main/kotlin/io/github/omkar_git_hub/offlink/`.
+- Production Signing Architecture:
+  - Configured `signingConfigs.create("release")` reading `OFFLINK_KEYSTORE_PATH` and related credentials.
+  - Fail-safe fallback to debug signing if environment secrets are not yet configured, preventing pipeline disruption.
+- Pure Dart Release Tooling Suite (`tool/release/`):
+  - `version_calculator.dart`: Semantic versioning with PR label detection (`release:major`, `release:minor`, `release:patch`, `release:alpha`, `release:beta`, `release:stable`) and tag collision avoidance.
+  - `release_notes_generator.dart`: Keep-a-Changelog commit parser and changelog updater.
+  - `verify_release_apk.dart`: SHA-256 calculation, `aapt dump badging` verification, and `apksigner` certificate parsing.
+  - `publish_release.dart`: GitHub Release publisher with idempotency checks.
+  - `sync_distribution_repo.dart`: Synchronizes `metadata/release-information.json`, `metadata/app-information.json`, `CHANGELOG.md`, and `RELEASES.md` in `offlink-releases`.
+- Hardened CI Workflow (`ci.yml`):
+  - Runs on PRs to `main` and pushes to `feature/**`.
+  - Enforces Gitleaks secret detection, dependency check, `dart format`, `flutter analyze`, 352 unit tests, release APK build, and APK structure verification.
+- Documentation & Guides:
+  - `docs/development/AUTOMATED_RELEASE_PIPELINE.md`: Complete architecture, secrets bootstrap, PR labels, and troubleshooting guide.
+  - `docs/development/LICENSING_ANALYSIS.md`: Open-source licensing analysis (GPL-3.0 recommendation) for F-Droid readiness.
+  - `docs/development/RELEASE_AUTOMATION_PROGRESS.md`: End-to-end audit and status checkpoint.
 
 ## Status
-- **Status**: PR #22 OPEN — ALL CI CHECKS PASSED — AWAITING USER REVIEW & MERGE
+- **Status**: IMPLEMENTATION COMPLETE — 352/352 TESTS PASSING — RELEASE APK VERIFIED — READY FOR PR CREATION
 
 ## Completed Work
 1. **Module 1 Merged into main**: PR #12 merged (`6d44f44`).
@@ -50,43 +43,32 @@
 8. **Module 8 Merged into main**: PR #19 merged (`81c3ee8`).
 9. **Module 9 Merged into main**: PR #20 merged (`99e056a`).
 10. **Module 10 Merged into main**: PR #21 merged (`a34b4c7`).
-11. **Module 11 Security Hardening & Abuse Controls**:
-    - Created `BlockedPeersTable`, `PeerTrustTable`, and migrated Drift database to schema version 4.
-    - Implemented `TrustStatus`, `PeerTrust`, `BlockedPeer`, `PeerSecurityRepository`, and `DriftPeerSecurityRepository`.
-    - Implemented `SafetyFingerprintGenerator` (symmetric 60-digit deterministic SHA-256 fingerprinting).
-    - Implemented `FloodRateLimiter` (sliding-window throttling with 30s quarantine backoff).
-    - Integrated peer blocking and rate limiting into `MeshPacketRouter`.
-    - Integrated MITM key mismatch detection and trust recording into `DirectMessageService`.
-    - Filtered blocked peers from `AdaptiveBleDiscovery`, `ConnectionRecoveryCoordinator`, `GroupMessageService`.
-    - Created `SafetyFingerprintDialog`, updated `ChatPage` with security banner/verification badge/actions, and added blocked contacts manager to `HomePage`.
-    - Added comprehensive unit, widget, and protocol fuzzing tests (37 new tests).
-    - Recorded `DECISION-013` in `docs/development/AI_DECISIONS.md`.
-    - Pull Request #22 created: https://github.com/Omkar-git-hub/offlink/pull/22.
-
+11. **Module 11 Merged into main**: PR #22 merged (`c41b0df`).
+12. **Initial Release Distribution Deployed**: `v0.1.0-alpha.1` on `Omkar-git-hub/offlink-releases` (`5a64550`).
+13. **Phase 1 Automated CI/CD and Release System**:
+    - Application identity migrated to `io.github.omkar_git_hub.offlink`.
+    - Pure Dart tooling suite implemented in `tool/release/`.
+    - 28 unit tests added for release automation (100% pass rate).
+    - `.github/workflows/ci.yml` and `.github/workflows/release.yml` created/hardened.
+    - Full Android release APK built and verified locally (`build/app/outputs/flutter-apk/app-release.apk`, 57.3 MB).
+    - Comprehensive pipeline documentation created.
 
 ## Tests Run & Results
-- `dart format --output=none --set-exit-if-changed .`: PASS (0 differences)
-- `flutter analyze`: PASS (0 issues found)
-- `flutter test`: PASS (324/324 tests passing, 37 new tests added for Module 11)
-  - `test/unit/security/safety_fingerprint_generator_test.dart` (5 tests)
-  - `test/unit/security/flood_rate_limiter_test.dart` (7 tests)
-  - `test/unit/database/drift_peer_security_repository_test.dart` (4 tests)
-  - `test/unit/protocol/protocol_fuzz_test.dart` (9 tests)
-  - `test/unit/security/security_integration_test.dart` (5 tests)
-  - `test/widget/chat/safety_fingerprint_dialog_test.dart` (3 tests)
-  - `test/widget/chat/chat_page_test.dart` (updated with 4 new security tests, 10 tests total)
-  - `test/unit/database/offlink_database_test.dart` (updated for schema v4)
-  - All existing 287 unit, widget, and lifecycle tests passing.
-- `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built successfully in 132.7s)
-- GitHub Actions CI: PASS (job 137335339513 on PR #22 passed all steps in 4m39s)
+- `dart format --output=none --set-exit-if-changed .`: PASS (183 files checked, 0 changed).
+- `flutter analyze`: PASS (0 issues found).
+- `flutter test`: PASS (352/352 tests passing across entire repository, 28 new tests for release tooling).
+  - `test/unit/release/version_calculator_test.dart` (13 tests)
+  - `test/unit/release/release_notes_generator_test.dart` (4 tests)
+  - `test/unit/release/verify_release_apk_test.dart` (6 tests)
+  - `test/unit/release/sync_distribution_repo_test.dart` (5 tests)
+  - All existing 324 core unit, widget, security, and protocol fuzzing tests passing.
+- `flutter build apk --release`: PASS (`build/app/outputs/flutter-apk/app-release.apk` built in 390.2s).
+- `verify_release_apk.dart`: PASS (`SHA-256: eadf303a...`, 60,031,189 bytes).
 
 ## Known Failures & Unresolved Issues
 - None.
 
 ## Exact Next Action
-1. User reviews and manually merges PR #22 into `main` (never auto-merge).
-2. Switch to `main` and pull latest changes: `git checkout main && git pull origin main`.
-3. Verify baseline test suite on `main`.
-4. Identify next module from roadmap and proceed upon confirmation.
-
-
+1. Stage, commit, and push all changes on `feature/automated-ci-cd-release-system`.
+2. Open Pull Request targeting `main` on `Omkar-git-hub/offlink`.
+3. Report PR URL, CI status, and one-time setup guide to user. Await manual review and merge (never auto-merge).

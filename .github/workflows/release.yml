@@ -1,0 +1,214 @@
+name: Offlink Release Automation
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.gitignore'
+
+permissions:
+  contents: write
+  packages: write
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Determine PR labels (if merge commit)
+        id: pr_labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=$(git log -1 --pretty=%s | grep -oE '#[0-9]+' | head -1 | tr -d '#' || true)
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Detected PR #$PR_NUMBER from merge commit"
+            LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>/dev/null | tr '\n' ',' || true)
+            echo "labels=$LABELS" >> $GITHUB_OUTPUT
+          else
+            echo "Direct push or merge without PR number detected"
+            echo "labels=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Calculate next version
+        id: versioning
+        run: |
+          dart run tool/release/version_calculator.dart \
+            --labels="${{ steps.pr_labels.outputs.labels }}" \
+            --update-pubspec \
+            --github-output=$GITHUB_OUTPUT
+
+      - name: Generate release notes and update CHANGELOG
+        id: release_notes
+        run: |
+          dart run tool/release/release_notes_generator.dart \
+            --version=${{ steps.versioning.outputs.version }} \
+            --tag=${{ steps.versioning.outputs.tag }} \
+            --output=RELEASE_NOTES.md \
+            --update-changelog
+
+      - name: Set up Android Keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.OFFLINK_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.OFFLINK_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.OFFLINK_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.OFFLINK_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Configuring production release keystore..."
+            KEYSTORE_FILE="${{ runner.temp }}/release.jks"
+            echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE"
+            echo "OFFLINK_KEYSTORE_PATH=$KEYSTORE_FILE" >> $GITHUB_ENV
+            echo "OFFLINK_KEYSTORE_PASSWORD=$KEYSTORE_PASS" >> $GITHUB_ENV
+            echo "OFFLINK_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+            echo "OFFLINK_KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
+            echo "signed_type=Android Production Keystore" >> $GITHUB_OUTPUT
+          else
+            echo "::warning ::OFFLINK_KEYSTORE_BASE64 secret not set. Using debug fallback signing for pre-release."
+            mkdir -p ~/.android ~/.config/.android
+            if [ ! -f ~/.android/debug.keystore ] && [ ! -f ~/.config/.android/debug.keystore ]; then
+              keytool -genkeypair -v \
+                -keystore ~/.android/debug.keystore \
+                -alias androiddebugkey \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -storepass android \
+                -keypass android \
+                -dname "CN=Android Debug,O=Android,C=US"
+              cp -f ~/.android/debug.keystore ~/.config/.android/debug.keystore 2>/dev/null || true
+            fi
+            echo "signed_type=Android Debug (Fallback Keystore)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build Android Release APK
+        run: |
+          flutter build apk --release \
+            --build-name=${{ steps.versioning.outputs.version }} \
+            --build-number=${{ steps.versioning.outputs.version_code }} \
+            --android-skip-build-dependency-validation
+
+      - name: Prepare and verify release artifact
+        id: verify_apk
+        run: |
+          VERSION="${{ steps.versioning.outputs.version }}"
+          APK_NAME="Offlink-${VERSION}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "$APK_NAME"
+
+          dart run tool/release/verify_release_apk.dart \
+            --apk="$APK_NAME" \
+            --expected-package=io.github.omkar_git_hub.offlink \
+            --checksum-file=SHA256SUMS.txt \
+            --github-output=$GITHUB_OUTPUT
+
+      - name: Clean up Keystore file
+        if: always()
+        run: |
+          if [ -n "$OFFLINK_KEYSTORE_PATH" ] && [ -f "$OFFLINK_KEYSTORE_PATH" ]; then
+            rm -f "$OFFLINK_KEYSTORE_PATH"
+            echo "Keystore temporary file securely removed."
+          fi
+
+      - name: Commit version bump and updated CHANGELOG to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pubspec.yaml CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): bump version to ${{ steps.versioning.outputs.version }} [skip ci]"
+            git push origin main
+          fi
+
+      - name: Create Git tag on source repository
+        run: |
+          git tag -a "${{ steps.versioning.outputs.tag }}" -m "Release ${{ steps.versioning.outputs.tag }}"
+          git push origin "${{ steps.versioning.outputs.tag }}"
+
+      - name: Create GitHub Release on source repository (offlink)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRERELEASE_FLAG=""
+          if [ "${{ steps.versioning.outputs.is_prerelease }}" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          gh release create "${{ steps.versioning.outputs.tag }}" \
+            --repo "Omkar-git-hub/offlink" \
+            --title "Offlink ${{ steps.versioning.outputs.tag }}" \
+            --notes-file RELEASE_NOTES.md \
+            $PRERELEASE_FLAG \
+            "Offlink-${{ steps.versioning.outputs.version }}.apk" \
+            SHA256SUMS.txt
+
+      - name: Publish to distribution repository (offlink-releases)
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::warning ::RELEASE_TOKEN secret is not set. Skipping release publishing to Omkar-git-hub/offlink-releases."
+            echo "To enable automatic publishing to the distribution repo, configure RELEASE_TOKEN secret with 'repo' scope."
+            exit 0
+          fi
+
+          echo "Cloning distribution repository..."
+          git clone "https://x-access-token:${RELEASE_TOKEN}@github.com/Omkar-git-hub/offlink-releases.git" dist-repo
+
+          echo "Synchronizing distribution repository metadata..."
+          dart run tool/release/sync_distribution_repo.dart \
+            --distribution-dir=dist-repo \
+            --version=${{ steps.versioning.outputs.version }} \
+            --version-code=${{ steps.versioning.outputs.version_code }} \
+            --tag=${{ steps.versioning.outputs.tag }} \
+            --apk="Offlink-${{ steps.versioning.outputs.version }}.apk" \
+            --checksum-file=SHA256SUMS.txt \
+            --notes=RELEASE_NOTES.md \
+            --channel=${{ steps.versioning.outputs.channel }} \
+            --prerelease=${{ steps.versioning.outputs.is_prerelease }} \
+            --signing-type="${{ steps.keystore.outputs.signed_type }}"
+
+          cd dist-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add metadata/ CHANGELOG.md RELEASES.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs(release): update metadata and changelog for ${{ steps.versioning.outputs.tag }}"
+            git push origin main
+          fi
+          cd ..
+
+          echo "Publishing GitHub Release to Omkar-git-hub/offlink-releases..."
+          dart run tool/release/publish_release.dart \
+            --distribution-repo=Omkar-git-hub/offlink-releases \
+            --version=${{ steps.versioning.outputs.version }} \
+            --tag=${{ steps.versioning.outputs.tag }} \
+            --notes=RELEASE_NOTES.md \
+            --apk="Offlink-${{ steps.versioning.outputs.version }}.apk" \
+            --checksum=SHA256SUMS.txt \
+            --prerelease=${{ steps.versioning.outputs.is_prerelease }} \
+            --token="$RELEASE_TOKEN"

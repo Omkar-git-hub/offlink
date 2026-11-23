@@ -6,7 +6,9 @@ class MethodChannelBackgroundService implements BackgroundServiceContract {
   MethodChannelBackgroundService({MethodChannel? channel})
     : _channel =
           channel ??
-          const MethodChannel('com.example.offlink/background_service');
+          const MethodChannel(
+            'io.github.omkar_git_hub.offlink/background_service',
+          );
 
   final MethodChannel _channel;
 

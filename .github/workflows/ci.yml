@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+      - 'feature/**'
 
 permissions:
   contents: read
@@ -52,5 +53,27 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      - name: Build Android APK
-        run: flutter build apk --debug --android-skip-build-dependency-validation
+      - name: Ensure debug keystore exists
+        run: |
+          mkdir -p ~/.android ~/.config/.android
+          if [ ! -f ~/.android/debug.keystore ] && [ ! -f ~/.config/.android/debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore ~/.android/debug.keystore \
+              -alias androiddebugkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+            cp -f ~/.android/debug.keystore ~/.config/.android/debug.keystore 2>/dev/null || true
+          fi
+
+      - name: Build Android Release APK
+        run: flutter build apk --release --android-skip-build-dependency-validation
+
+      - name: Verify Release APK integrity
+        run: |
+          dart run tool/release/verify_release_apk.dart \
+            --apk=build/app/outputs/flutter-apk/app-release.apk \
+            --expected-package=io.github.omkar_git_hub.offlink
