@@ -1,4 +1,4 @@
-package com.example.offlink
+package io.github.omkar_git_hub.offlink
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -17,8 +17,8 @@ class OfflinkForegroundService : Service() {
     companion object {
         const val CHANNEL_ID = "offlink_background_channel"
         const val NOTIFICATION_ID = 1001
-        const val ACTION_START = "com.example.offlink.START_FOREGROUND"
-        const val ACTION_STOP = "com.example.offlink.STOP_FOREGROUND"
+        const val ACTION_START = "io.github.omkar_git_hub.offlink.START_FOREGROUND"
+        const val ACTION_STOP = "io.github.omkar_git_hub.offlink.STOP_FOREGROUND"
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_MESSAGE = "extra_message"
 
