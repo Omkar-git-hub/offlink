@@ -192,4 +192,36 @@ This document records durable architectural, protocol, security, and compatibili
     - Zero crashes, unhandled exceptions, or denial-of-service conditions confirmed across corrupted payloads.
 - **Status**: Implemented in Module 11 (`feature/security-hardening-abuse-controls`).
 
+---
+
+## DECISION-014: RFC 4122 v4 Standard BLE UUIDs, Resilient GATT Discovery Retry Loop, and Separation of Hardware Platform Name from Peer Identity
+- **Context**: Real device testing on Android hardware (e.g. Motorola Edge 50 Pro) identified two critical bugs in peer-to-peer connectivity:
+  1. BLE Connection Failure: Central devices encountered `Unable to connect: Bad state: Offlink BLE service was not found.`
+  2. Peer Identity Display: Nearby discovered peers were displayed using the Android OS hardware model (`motorola` or `Motorola Edge 50 Pro`) rather than the user's configured Offlink username.
+- **Root Cause & Architectural Impact**:
+  - Nil UUID Android GATT Server Rejection: `OfflinkBleService` used `00000000-0000-0000-0000-000000000000`. Android's native Bluetooth stack (`BluetoothGattServer.addService()`) rejects nil UUIDs as invalid, causing peripheral GATT service registration to silently fail while advertising broadcasts continued.
+  - Peripheral GATT Registration Race Condition: Peripheral advertising started synchronously while GATT services registered asynchronously. Fast-connecting Centrals invoked service discovery before GATT registration finished.
+  - Disparate UUID String Formatting: `service.uuid.toString()` in Flutter Blue Plus produced differing string representations across platforms and short forms.
+  - Conflation of Hardware Platform Name with User Identity: Centrals fell back to `result.device.platformName` (the Android OS Bluetooth name) when advertising local names were absent. Configured Offlink usernames were not transmitted during scan responses or cryptographic handshakes.
+- **Decision**:
+  - RFC 4122 v4 Standard UUIDs (`OfflinkBleService`):
+    - Service UUID: `0f110001-4000-4000-8000-000000000000`
+    - Control Characteristic UUID: `0f110002-4000-4000-8000-000000000000`
+    - TX Characteristic UUID: `0f110003-4000-4000-8000-000000000000`
+    - RX Characteristic UUID: `0f110004-4000-4000-8000-000000000000`
+    - Manufacturer ID: `0x0F11`
+  - Canonical UUID Normalization:
+    - Normalizes UUID comparisons (`str128.toLowerCase()`) stripped of hyphenation, guaranteeing reliable matching regardless of 16-bit, 32-bit, or 128-bit formatting.
+  - Resilient GATT Discovery Retry Loop (`BlePacketChannel`):
+    - Discovers services with up to 3 attempts, applying progressive exponential delay (`150ms * attempt`) and invoking `clearGattCache()` on Android on retry to eliminate race conditions with peripheral GATT registration.
+    - Throws strongly-typed `OfflinkBleServiceNotFoundException` with actionable context.
+  - Three-Tier Peer Identity Hierarchy (`BlePeer`):
+    - `username`: Cryptographically or scan-advertised Offlink username.
+    - `deviceModel`: Physical hardware name (`result.device.platformName`).
+    - `displayName`: Evaluated strictly as `username ?? advertisedUsername ?? 'Offlink User'`, never displaying the hardware model as the user's name.
+  - Two-Stage Out-of-Band Username Exchange:
+    - Stage 1 (Scan Response): `FlutterBleAdvertiser` broadcasts the UTF-8 encoded Offlink username in `AndroidAdvertiseSettings.advertiseResponseData` using manufacturer ID `0x0F11`. Centrals extract this during scanning without connecting.
+    - Stage 2 (E2EE Handshake): `HandshakeInitPayload` and `HandshakeResponsePayload` carry `senderUsername`. Upon completion of authenticated sessions, `DirectMessageService` persists verified usernames in `ConversationRepository` and emits `peerIdentityUpdates` to dynamically update UI tiles.
+- **Status**: Implemented in Bug Fix (`bugfix/ble-service-discovery-peer-identity`).
+
 

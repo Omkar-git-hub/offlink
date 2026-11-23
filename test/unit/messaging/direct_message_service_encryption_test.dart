@@ -396,5 +396,61 @@ void main() {
         await sub.cancel();
       },
     );
+
+    test(
+      'exchanges senderUsername in handshake and updates peer identity and conversation repository',
+      () async {
+        // Collect peer identity updates
+        final receivedIdentities = <({String peerId, String username})>[];
+        final sub = service.peerIdentityUpdates.listen(receivedIdentities.add);
+
+        // 1. Alice initiates handshake
+        await service.initiateSecureSession(
+          peerId: 'peer-bob',
+          recipientNodeId: bobNodeId,
+        );
+
+        expect(transport.sentPackets, isNotEmpty);
+        final initPacket = transport.sentPackets.first.packet;
+        final initPayload = HandshakeInitPayload.decode(initPacket.payload);
+        // Alice includes her identity username in HandshakeInitPayload
+        expect(initPayload.senderUsername, equals('Alice'));
+
+        // 2. Bob handles init and responds with his username 'Bob'
+        final responsePayload = await bobSessionService.handleHandshakeInit(
+          initPayload,
+          senderUsername: 'Bob',
+        );
+        expect(responsePayload.senderUsername, equals('Bob'));
+
+        // 3. Emit handshakeResponse packet from Bob to Alice
+        transport.emit(
+          OfflinkPacket(
+            messageId: 'resp-username-1',
+            senderNodeId: bobNodeId,
+            recipientNodeId: aliceNodeId,
+            messageType: OfflinkMessageType.handshakeResponse,
+            timestamp: DateTime.now().toUtc(),
+            ttl: 3,
+            payload: responsePayload.encode(),
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+
+        // 4. Verify Alice received Bob's username via stream
+        expect(receivedIdentities, isNotEmpty);
+        expect(receivedIdentities.first.peerId, equals(bobNodeId));
+        expect(receivedIdentities.first.username, equals('Bob'));
+
+        // 5. Verify conversation repository updated peerDisplayName to 'Bob'
+        final conversation = await conversationRepository.getConversationByPeer(
+          bobNodeId,
+        );
+        expect(conversation, isNotNull);
+        expect(conversation!.peerDisplayName, equals('Bob'));
+
+        await sub.cancel();
+      },
+    );
   });
 }

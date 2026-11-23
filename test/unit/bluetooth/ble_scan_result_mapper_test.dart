@@ -9,21 +9,28 @@ void main() {
   const mapper = BleScanResultMapper(serviceFilter: BleServiceFilter());
 
   group('BleScanResultMapper', () {
-    test('maps an Offlink scan result to BlePeer', () {
-      const scanData = BleScanData(
-        peerId: 'peer-123',
-        displayName: 'Omkar',
-        signalStrength: -55,
-        serviceUuids: [OfflinkBleService.serviceUuid],
-      );
+    test(
+      'maps an Offlink scan result to BlePeer with deviceModel and username',
+      () {
+        const scanData = BleScanData(
+          peerId: 'peer-123',
+          displayName: 'Omkar',
+          deviceModel: 'Motorola Edge 50 Pro',
+          username: 'Omkar',
+          signalStrength: -55,
+          serviceUuids: [OfflinkBleService.serviceUuid],
+        );
 
-      final peer = mapper.map(scanData);
+        final peer = mapper.map(scanData);
 
-      expect(peer, isNotNull);
-      expect(peer!.peerId, 'peer-123');
-      expect(peer.displayName, 'Omkar');
-      expect(peer.signalStrength, -55);
-    });
+        expect(peer, isNotNull);
+        expect(peer!.peerId, 'peer-123');
+        expect(peer.displayName, 'Omkar');
+        expect(peer.deviceModel, 'Motorola Edge 50 Pro');
+        expect(peer.username, 'Omkar');
+        expect(peer.signalStrength, -55);
+      },
+    );
 
     test('returns null for a non-Offlink device', () {
       const scanData = BleScanData(

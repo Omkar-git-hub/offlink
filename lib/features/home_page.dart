@@ -17,7 +17,10 @@ import '../domain/group/group_repository.dart';
 import '../domain/identity/identity_manager.dart';
 import '../domain/lifecycle/app_lifecycle_coordinator.dart';
 import '../domain/lifecycle/connection_recovery_coordinator.dart';
+import '../bluetooth/ble_packet_channel.dart';
 import '../domain/mesh/mesh_packet_router.dart';
+import '../domain/messaging/conversation_repository.dart';
+import '../domain/messaging/direct_message_service.dart';
 import '../domain/messaging/message_repository.dart';
 import '../domain/messaging/message_service.dart';
 import '../domain/location/location_service.dart';
@@ -41,6 +44,7 @@ class HomePage extends StatefulWidget {
     this.identityManager,
     this.messageService,
     this.messageRepository,
+    this.conversationRepository,
     this.groupMessageService,
     this.groupRepository,
     this.locationService,
@@ -57,6 +61,7 @@ class HomePage extends StatefulWidget {
   final IdentityManager? identityManager;
   final MessageService? messageService;
   final MessageRepository? messageRepository;
+  final ConversationRepository? conversationRepository;
   final GroupMessageService? groupMessageService;
   final GroupRepository? groupRepository;
   final LocationService? locationService;
@@ -73,6 +78,8 @@ class _HomePageState extends State<HomePage> {
   StreamSubscription<dynamic>? _connectionSubscription;
   StreamSubscription<dynamic>? _incomingPacketSubscription;
   StreamSubscription<List<BlockedPeer>>? _blockedPeersSubscription;
+  StreamSubscription<({String peerId, String username})>?
+  _peerIdentitySubscription;
 
   final List<BlePeer> _nearbyPeers = [];
   final Set<String> _connectingPeerIds = {};
@@ -103,6 +110,24 @@ class _HomePageState extends State<HomePage> {
             _blockedPeerIds.addAll(blocked.map((p) => p.nodeId));
           });
         });
+
+    if (widget.messageService is DirectMessageService) {
+      final directService = widget.messageService as DirectMessageService;
+      _peerIdentitySubscription = directService.peerIdentityUpdates.listen((
+        update,
+      ) {
+        if (!mounted || _isDisposed) return;
+        setState(() {
+          final idx = _nearbyPeers.indexWhere((p) => p.peerId == update.peerId);
+          if (idx != -1) {
+            _nearbyPeers[idx] = _nearbyPeers[idx].copyWith(
+              displayName: update.username,
+              username: update.username,
+            );
+          }
+        });
+      });
+    }
 
     _discovery = widget.discovery ?? PhoneBleDiscovery();
 
@@ -219,8 +244,19 @@ class _HomePageState extends State<HomePage> {
 
         if (existingIndex == -1) {
           _nearbyPeers.add(event.peer);
+          _resolveCachedPeerName(event.peer);
         } else {
-          _nearbyPeers[existingIndex] = event.peer;
+          final existing = _nearbyPeers[existingIndex];
+          _nearbyPeers[existingIndex] = existing.copyWith(
+            displayName:
+                event.peer.username != null && event.peer.username!.isNotEmpty
+                ? event.peer.displayName
+                : existing.displayName,
+            deviceModel: event.peer.deviceModel ?? existing.deviceModel,
+            username: event.peer.username ?? existing.username,
+            signalStrength:
+                event.peer.signalStrength ?? existing.signalStrength,
+          );
         }
       } else if (event.type == BleDiscoveryEventType.lost) {
         _nearbyPeers.removeWhere((peer) => peer.peerId == event.peer.peerId);
@@ -229,6 +265,28 @@ class _HomePageState extends State<HomePage> {
         _connectedPeerIds.remove(event.peer.peerId);
       }
     });
+  }
+
+  Future<void> _resolveCachedPeerName(BlePeer peer) async {
+    final repo = widget.conversationRepository;
+    if (repo == null) return;
+    try {
+      final conversation = await repo.getConversationByPeer(peer.peerId);
+      if (conversation != null &&
+          conversation.peerDisplayName.isNotEmpty &&
+          !conversation.peerDisplayName.startsWith('Peer ')) {
+        if (!mounted || _isDisposed) return;
+        setState(() {
+          final idx = _nearbyPeers.indexWhere((p) => p.peerId == peer.peerId);
+          if (idx != -1 && _nearbyPeers[idx].username == null) {
+            _nearbyPeers[idx] = _nearbyPeers[idx].copyWith(
+              displayName: conversation.peerDisplayName,
+              username: conversation.peerDisplayName,
+            );
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _connectToPeer(BlePeer peer) async {
@@ -266,6 +324,18 @@ class _HomePageState extends State<HomePage> {
         _connectedPeerIds.add(peer.peerId);
       });
 
+      if (widget.messageService is DirectMessageService) {
+        final directService = widget.messageService as DirectMessageService;
+        if (!directService.hasSecureSession(peer.peerId)) {
+          unawaited(
+            directService.initiateSecureSession(
+              peerId: peer.peerId,
+              recipientNodeId: peer.peerId,
+            ),
+          );
+        }
+      }
+
       debugPrint('[Offlink BLE] Connected to peer: ${peer.peerId}');
       debugPrint('[Offlink Packet] Packet channel ready: ${peer.peerId}');
     } catch (error) {
@@ -279,10 +349,18 @@ class _HomePageState extends State<HomePage> {
         // Ignore cleanup failure.
       }
 
+      final String userFriendlyError;
+      if (error is OfflinkBleServiceNotFoundException) {
+        userFriendlyError =
+            'Unable to connect to ${peer.displayName}: Offlink BLE service was not found on the remote device. Ensure Offlink is open and running on the other device.';
+      } else {
+        userFriendlyError = 'Unable to connect to ${peer.displayName}: $error';
+      }
+
       setState(() {
         _connectingPeerIds.remove(peer.peerId);
         _connectedPeerIds.remove(peer.peerId);
-        _errorMessage = 'Unable to connect to ${peer.displayName}: $error';
+        _errorMessage = userFriendlyError;
       });
 
       debugPrint('[Offlink BLE] Connection failed for ${peer.peerId}: $error');
@@ -567,6 +645,7 @@ class _HomePageState extends State<HomePage> {
     _connectionSubscription?.cancel();
     _incomingPacketSubscription?.cancel();
     _blockedPeersSubscription?.cancel();
+    _peerIdentitySubscription?.cancel();
 
     if (widget.discovery == null) {
       final discovery = _discovery;
@@ -962,6 +1041,32 @@ class _HomePageState extends State<HomePage> {
     final isConnecting = _connectingPeerIds.contains(peer.peerId);
     final isConnected = _connectedPeerIds.contains(peer.peerId);
 
+    final String titleText = peer.displayName.isNotEmpty
+        ? peer.displayName
+        : 'Offlink User';
+
+    final String subtitleText;
+    if (isConnected) {
+      if (peer.deviceModel != null && peer.deviceModel!.isNotEmpty) {
+        subtitleText = 'Connected • ${peer.deviceModel}';
+      } else {
+        subtitleText = 'Connected';
+      }
+    } else {
+      final signalText = peer.signalStrength != null
+          ? 'Signal: ${peer.signalStrength} dBm'
+          : null;
+      if (peer.deviceModel != null &&
+          peer.deviceModel!.isNotEmpty &&
+          peer.deviceModel!.toLowerCase() != titleText.toLowerCase()) {
+        subtitleText = signalText != null
+            ? '${peer.deviceModel} • $signalText'
+            : peer.deviceModel!;
+      } else {
+        subtitleText = signalText ?? 'Nearby';
+      }
+    }
+
     return Card(
       child: ListTile(
         onTap: isConnected && widget.messageService != null
@@ -970,14 +1075,8 @@ class _HomePageState extends State<HomePage> {
         leading: CircleAvatar(
           child: Icon(isConnected ? Icons.bluetooth_connected : Icons.person),
         ),
-        title: Text(
-          peer.displayName.isNotEmpty
-              ? peer.displayName
-              : 'Unknown Offlink User',
-        ),
-        subtitle: Text(
-          isConnected ? 'Connected' : 'Signal: ${peer.signalStrength} dBm',
-        ),
+        title: Text(titleText),
+        subtitle: Text(subtitleText),
         trailing: isConnecting
             ? const SizedBox(
                 width: 24,

@@ -21,8 +21,29 @@ void main() {
       expect(decoded.ephemeralPublicKey, 'base64ephemeral');
       expect(decoded.timestamp, now);
       expect(decoded.signature, 'base64sig');
+      expect(decoded.senderUsername, isNull);
       expect(decoded.toSignableBytes(), equals(payload.toSignableBytes()));
     });
+
+    test(
+      'HandshakeInitPayload encodes and decodes senderUsername when provided',
+      () {
+        final now = DateTime.utc(2026, 11, 17, 12, 0, 0);
+        final payload = HandshakeInitPayload(
+          senderNodeId: 'node-alice',
+          senderIdentityPublicKey: 'deadbeef1234',
+          ephemeralPublicKey: 'base64ephemeral',
+          timestamp: now,
+          signature: 'base64sig',
+          senderUsername: 'Alice In Wonderland',
+        );
+
+        final encoded = payload.encode();
+        final decoded = HandshakeInitPayload.decode(encoded);
+
+        expect(decoded.senderUsername, 'Alice In Wonderland');
+      },
+    );
 
     test('HandshakeResponsePayload encodes and decodes properly', () {
       final now = DateTime.utc(2026, 11, 17, 12, 1, 0);
@@ -46,8 +67,31 @@ void main() {
       expect(decoded.peerEphemeralPublicKey, 'base64aliceephemeral');
       expect(decoded.timestamp, now);
       expect(decoded.signature, 'base64bobsig');
+      expect(decoded.senderUsername, isNull);
       expect(decoded.toSignableBytes(), equals(payload.toSignableBytes()));
     });
+
+    test(
+      'HandshakeResponsePayload encodes and decodes senderUsername when provided',
+      () {
+        final now = DateTime.utc(2026, 11, 17, 12, 1, 0);
+        final payload = HandshakeResponsePayload(
+          senderNodeId: 'node-bob',
+          recipientNodeId: 'node-alice',
+          senderIdentityPublicKey: 'feedface5678',
+          ephemeralPublicKey: 'base64bobephemeral',
+          peerEphemeralPublicKey: 'base64aliceephemeral',
+          timestamp: now,
+          signature: 'base64bobsig',
+          senderUsername: 'Bob The Builder',
+        );
+
+        final encoded = payload.encode();
+        final decoded = HandshakeResponsePayload.decode(encoded);
+
+        expect(decoded.senderUsername, 'Bob The Builder');
+      },
+    );
 
     test('throws FormatException on malformed payloads', () {
       expect(

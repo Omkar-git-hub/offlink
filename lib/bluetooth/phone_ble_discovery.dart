@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
@@ -136,11 +137,50 @@ class PhoneBleDiscovery implements BleDiscovery {
 
   void _handleScanResults(List<ScanResult> results) {
     for (final result in results) {
+      String? advertisedUsername;
+      final mfgData = result
+          .advertisementData
+          .manufacturerData[OfflinkBleService.manufacturerId];
+      if (mfgData != null && mfgData.isNotEmpty) {
+        try {
+          final decoded = utf8.decode(mfgData).trim();
+          if (decoded.isNotEmpty) {
+            advertisedUsername = decoded;
+          }
+        } catch (_) {}
+      }
+
+      final hardwareModel = result.device.platformName.trim().isNotEmpty
+          ? result.device.platformName.trim()
+          : null;
+
+      final advName = result.advertisementData.advName.trim();
+
+      // Determine display name hierarchy:
+      // 1. Advertised Offlink username (from manufacturerData in scan response)
+      // 2. Non-generic advName (if set and not matching platformName)
+      // 3. Fallback to clean 'Offlink User'
+      final String effectiveDisplayName;
+      final String? effectiveUsername;
+
+      if (advertisedUsername != null && advertisedUsername.isNotEmpty) {
+        effectiveDisplayName = advertisedUsername;
+        effectiveUsername = advertisedUsername;
+      } else if (advName.isNotEmpty &&
+          (hardwareModel == null ||
+              advName.toLowerCase() != hardwareModel.toLowerCase())) {
+        effectiveDisplayName = advName;
+        effectiveUsername = advName;
+      } else {
+        effectiveDisplayName = 'Offlink User';
+        effectiveUsername = null;
+      }
+
       final scanData = BleScanData(
         peerId: result.device.remoteId.str,
-        displayName: result.advertisementData.advName.isNotEmpty
-            ? result.advertisementData.advName
-            : result.device.platformName,
+        displayName: effectiveDisplayName,
+        deviceModel: hardwareModel,
+        username: effectiveUsername,
         signalStrength: result.rssi,
         serviceUuids: result.advertisementData.serviceUuids
             .map((uuid) => uuid.str)

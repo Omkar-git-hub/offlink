@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'bluetooth/adaptive_ble_discovery.dart';
+import 'bluetooth/ble_advertiser.dart';
 import 'bluetooth/ble_packet_transport.dart';
 import 'bluetooth/ble_peripheral_packet_channel.dart';
 import 'bluetooth/flutter_blue_plus_device_connection.dart';
@@ -30,6 +31,7 @@ import 'domain/lifecycle/connection_recovery_coordinator.dart';
 import 'domain/lifecycle/pending_message_recovery_service.dart';
 import 'domain/location/location_service.dart';
 import 'domain/mesh/mesh_packet_router.dart';
+import 'domain/messaging/conversation_repository.dart';
 import 'domain/messaging/direct_message_service.dart';
 import 'domain/messaging/message_repository.dart';
 import 'domain/messaging/message_service.dart';
@@ -138,7 +140,10 @@ Future<void> main() async {
 
   final backgroundService = MethodChannelBackgroundService();
   final lifecycleManager = AppLifecycleManager();
-  final phoneDiscovery = PhoneBleDiscovery();
+  final advertiser = FlutterBleAdvertiser(
+    getUsername: () => identityManager.currentIdentity?.username,
+  );
+  final phoneDiscovery = PhoneBleDiscovery(advertiser: advertiser);
   final adaptiveDiscovery = AdaptiveBleDiscovery(
     underlying: phoneDiscovery,
     isPeerBlocked: securityRepository.isPeerBlockedSync,
@@ -184,6 +189,7 @@ Future<void> main() async {
       connectionRecovery: connectionRecovery,
       messageService: messageService,
       messageRepository: messageRepository,
+      conversationRepository: conversationRepository,
       groupMessageService: groupMessageService,
       groupRepository: groupRepository,
       locationService: locationService,
@@ -208,6 +214,7 @@ class OfflinkApp extends StatefulWidget {
     this.connectionRecovery,
     required this.messageService,
     this.messageRepository,
+    this.conversationRepository,
     this.groupMessageService,
     this.groupRepository,
     this.locationService,
@@ -227,6 +234,7 @@ class OfflinkApp extends StatefulWidget {
   final ConnectionRecoveryCoordinator? connectionRecovery;
   final MessageService messageService;
   final MessageRepository? messageRepository;
+  final ConversationRepository? conversationRepository;
   final GroupMessageService? groupMessageService;
   final GroupRepository? groupRepository;
   final LocationService? locationService;
@@ -299,6 +307,7 @@ class _OfflinkAppState extends State<OfflinkApp> {
               identityManager: widget.identityManager,
               messageService: widget.messageService,
               messageRepository: widget.messageRepository,
+              conversationRepository: widget.conversationRepository,
               groupMessageService: widget.groupMessageService,
               groupRepository: widget.groupRepository,
               locationService: widget.locationService,
