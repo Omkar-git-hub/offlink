@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'pr_classifier.dart';
 
 /// Represents a parsed Semantic Version with pre-release channel support.
 class SemanticVersion {
@@ -64,9 +65,10 @@ class SemanticVersion {
     );
   }
 
-  /// Calculates the next [SemanticVersion] based on PR labels and existing tags.
+  /// Calculates the next [SemanticVersion] based on PR title, labels, and existing tags.
   static SemanticVersion calculateNext({
     SemanticVersion? currentVersion,
+    String? prTitle,
     List<String> labels = const [],
     List<String> existingTags = const [],
   }) {
@@ -89,6 +91,9 @@ class SemanticVersion {
     final nextVersionCode = current.versionCode + 1;
 
     final normalizedLabels = labels.map((l) => l.toLowerCase().trim()).toSet();
+    final prClassification = prTitle != null && prTitle.isNotEmpty
+        ? PrClassifier.parse(prTitle)
+        : null;
 
     if (normalizedLabels.contains('release:major')) {
       nextMajor = current.major + 1;
@@ -131,8 +136,32 @@ class SemanticVersion {
       nextIteration = (current.preReleaseChannel == 'alpha')
           ? (current.preReleaseIteration ?? 0) + 1
           : 1;
+    } else if (prClassification != null) {
+      if (prClassification.isBreaking) {
+        // Breaking change
+        if (current.isPreRelease) {
+          nextMinor = current.minor + 1;
+          nextPatch = 0;
+          nextIteration = 1;
+        } else {
+          nextMajor = current.major + 1;
+          nextMinor = 0;
+          nextPatch = 0;
+        }
+      } else if (prClassification.action == ReleaseAction.release) {
+        if (current.isPreRelease) {
+          nextIteration = (current.preReleaseIteration ?? 0) + 1;
+        } else {
+          if (prClassification.type == 'feat') {
+            nextMinor = current.minor + 1;
+            nextPatch = 0;
+          } else {
+            nextPatch = current.patch + 1;
+          }
+        }
+      }
     } else {
-      // Default behavior when no specific release label is present:
+      // Default behavior when no specific release label or PR classification is present:
       if (current.isPreRelease) {
         nextIteration = (current.preReleaseIteration ?? 0) + 1;
       } else {
@@ -174,8 +203,18 @@ class SemanticVersion {
     return candidate;
   }
 
-  /// Determines whether a release should be skipped based on PR labels or commit message.
-  static bool isReleaseSkipped(List<String> labels, {String? commitMessage}) {
+  /// Determines whether a release should be skipped based on PR title, PR labels, or commit message.
+  static bool isReleaseSkipped(
+    List<String> labels, {
+    String? commitMessage,
+    String? prTitle,
+  }) {
+    if (prTitle != null && prTitle.trim().isNotEmpty) {
+      final classification = PrClassifier.parse(prTitle);
+      if (classification != null && !classification.shouldRelease) {
+        return true;
+      }
+    }
     final normalized = labels.map((l) => l.toLowerCase().trim()).toSet();
     if (normalized.contains('release:skip') ||
         normalized.contains('no-release') ||
@@ -198,6 +237,7 @@ class SemanticVersion {
 /// CLI entrypoint for release automation.
 void main(List<String> args) {
   List<String> labels = [];
+  String? prTitle = Platform.environment['PR_TITLE'];
   String? commitMessage = Platform.environment['COMMIT_MESSAGE'];
   String? githubOutputFile = Platform.environment['GITHUB_OUTPUT'];
   bool updatePubspec = false;
@@ -210,6 +250,8 @@ void main(List<String> args) {
           .map((s) => s.trim())
           .where((s) => s.isNotEmpty)
           .toList();
+    } else if (arg.startsWith('--pr-title=')) {
+      prTitle = arg.substring('--pr-title='.length);
     } else if (arg.startsWith('--commit-message=')) {
       commitMessage = arg.substring('--commit-message='.length);
     } else if (arg.startsWith('--github-output=')) {
@@ -225,9 +267,14 @@ void main(List<String> args) {
     labels.addAll(envLabels.split(',').map((s) => s.trim()));
   }
 
+  final prClassification = prTitle != null && prTitle.isNotEmpty
+      ? PrClassifier.parse(prTitle)
+      : null;
+
   final shouldSkip = SemanticVersion.isReleaseSkipped(
     labels,
     commitMessage: commitMessage,
+    prTitle: prTitle,
   );
 
   // Fetch git tags
@@ -288,10 +335,13 @@ void main(List<String> args) {
 
   final next = SemanticVersion.calculateNext(
     currentVersion: current,
+    prTitle: prTitle,
     labels: labels,
     existingTags: existingTags,
   );
 
+  stdout.writeln('PR Title        : ${prTitle ?? "(none)"}');
+  stdout.writeln('PR Type         : ${prClassification?.type ?? "(none)"}');
   stdout.writeln('Current Version : ${current?.versionName ?? "none"}');
   stdout.writeln('Next Version    : ${next.versionName}');
   stdout.writeln('Next Tag        : ${next.tagName}');
@@ -329,6 +379,11 @@ void main(List<String> args) {
     sink.writeln('is_prerelease=${next.isPreRelease}');
     sink.writeln('channel=${next.preReleaseChannel ?? "stable"}');
     sink.writeln('should_release=${!shouldSkip}');
+    if (prClassification != null) {
+      sink.writeln('pr_type=${prClassification.type}');
+      sink.writeln('pr_scope=${prClassification.scope ?? ""}');
+      sink.writeln('is_breaking=${prClassification.isBreaking}');
+    }
     sink.close();
   }
 }

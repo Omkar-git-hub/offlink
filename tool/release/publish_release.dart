@@ -33,6 +33,45 @@ class ReleasePublisher {
     return result.exitCode == 0;
   }
 
+  /// Uploads or overwrites assets for an existing release.
+  static bool uploadAssets({
+    required String repo,
+    required String tag,
+    required List<File> assets,
+    String? token,
+  }) {
+    final env = token != null
+        ? {'GH_TOKEN': token, 'GITHUB_TOKEN': token}
+        : null;
+
+    final args = <String>[
+      'release',
+      'upload',
+      tag,
+      '--repo',
+      repo,
+      '--clobber',
+    ];
+
+    for (final asset in assets) {
+      if (asset.existsSync()) {
+        args.add(asset.path);
+      } else {
+        stderr.writeln('Warning: Asset ${asset.path} does not exist, skipping');
+      }
+    }
+
+    final result = runCmd('gh', args, environment: env);
+    if (result.exitCode != 0) {
+      stderr.writeln('Failed to upload assets on $repo: ${result.stderr}');
+      return false;
+    }
+
+    stdout.writeln('Successfully uploaded assets for $tag on $repo');
+    stdout.writeln(result.stdout);
+    return true;
+  }
+
   /// Creates a GitHub release and uploads assets.
   static bool createRelease({
     required String repo,
@@ -194,8 +233,20 @@ void main(List<String> args) {
   );
   if (exists) {
     stdout.writeln(
-      'Release $tag already exists on $distributionRepo. Skipping duplicate creation.',
+      'Release $tag already exists on $distributionRepo. Reconciling assets...',
     );
+    final uploaded = ReleasePublisher.uploadAssets(
+      repo: distributionRepo,
+      tag: tag,
+      assets: assets,
+      token: token,
+    );
+    if (!uploaded) {
+      stderr.writeln(
+        'Warning: Failed to reconcile some assets on $distributionRepo',
+      );
+    }
+    stdout.writeln('Release asset reconciliation completed.');
     exit(0);
   }
 

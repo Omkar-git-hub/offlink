@@ -2,6 +2,7 @@ name: Offlink CI
 
 on:
   pull_request:
+    types: [opened, edited, synchronize, reopened]
     branches:
       - main
 
@@ -36,7 +37,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Validate PR title convention
+        run: |
+          dart run tool/release/pr_classifier.dart --validate-title="${{ github.event.pull_request.title }}"
+
       - name: Check dependency vulnerabilities
+
         run: |
           dart pub outdated
 

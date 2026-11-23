@@ -132,6 +132,89 @@ void main() {
       expect(next.tagName, 'v0.1.0-alpha.3');
     });
 
+    test('calculates next alpha version from feat PR title', () {
+      final alpha2 = SemanticVersion.parse('v0.1.0-alpha.2', versionCode: 2)!;
+      final next = SemanticVersion.calculateNext(
+        currentVersion: alpha2,
+        prTitle: 'feat: add mesh packet relaying',
+      );
+      expect(next.versionName, '0.1.0-alpha.3');
+      expect(next.tagName, 'v0.1.0-alpha.3');
+      expect(next.versionCode, 3);
+      expect(next.isPreRelease, isTrue);
+    });
+
+    test('calculates next alpha version from fix PR title', () {
+      final alpha2 = SemanticVersion.parse('v0.1.0-alpha.2', versionCode: 2)!;
+      final next = SemanticVersion.calculateNext(
+        currentVersion: alpha2,
+        prTitle: 'fix(ble): resolve service discovery timeout',
+      );
+      expect(next.versionName, '0.1.0-alpha.3');
+      expect(next.versionCode, 3);
+    });
+
+    test('calculates next alpha version from perf PR title', () {
+      final alpha2 = SemanticVersion.parse('v0.1.0-alpha.2', versionCode: 2)!;
+      final next = SemanticVersion.calculateNext(
+        currentVersion: alpha2,
+        prTitle: 'perf(battery): reduce idle advertising frequency',
+      );
+      expect(next.versionName, '0.1.0-alpha.3');
+      expect(next.versionCode, 3);
+    });
+
+    test('bumps minor version on breaking change PR title during alpha', () {
+      final alpha2 = SemanticVersion.parse('v0.1.0-alpha.2', versionCode: 2)!;
+      final next = SemanticVersion.calculateNext(
+        currentVersion: alpha2,
+        prTitle: 'feat!: redesign crypto packet format',
+      );
+      expect(next.versionName, '0.2.0-alpha.1');
+      expect(next.tagName, 'v0.2.0-alpha.1');
+      expect(next.versionCode, 3);
+    });
+
+    test('skips release for non-release PR titles', () {
+      expect(
+        SemanticVersion.isReleaseSkipped([], prTitle: 'docs: update readme'),
+        isTrue,
+      );
+      expect(
+        SemanticVersion.isReleaseSkipped([], prTitle: 'test: add unit tests'),
+        isTrue,
+      );
+      expect(
+        SemanticVersion.isReleaseSkipped(
+          [],
+          prTitle: 'chore(deps): bump flutter',
+        ),
+        isTrue,
+      );
+      expect(
+        SemanticVersion.isReleaseSkipped(
+          [],
+          prTitle: 'ci: update actions runners',
+        ),
+        isTrue,
+      );
+      expect(
+        SemanticVersion.isReleaseSkipped(
+          [],
+          prTitle: 'refactor: extract class',
+        ),
+        isTrue,
+      );
+      expect(
+        SemanticVersion.isReleaseSkipped([], prTitle: 'feat: add new feature'),
+        isFalse,
+      );
+      expect(
+        SemanticVersion.isReleaseSkipped([], prTitle: 'fix: resolve bug'),
+        isFalse,
+      );
+    });
+
     test('detects release skipping via labels and commit message', () {
       expect(SemanticVersion.isReleaseSkipped(['release:skip']), isTrue);
       expect(SemanticVersion.isReleaseSkipped(['no-release']), isTrue);

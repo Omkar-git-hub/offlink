@@ -39,20 +39,41 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Determine PR labels (if merge commit)
-        id: pr_labels
+      - name: Extract PR metadata (if merge commit)
+        id: pr_meta
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER=$(git log -1 --pretty=%s | grep -oE '#[0-9]+' | head -1 | tr -d '#' || true)
+          PR_TITLE=""
+          PR_LABELS=""
+
           if [ -n "$PR_NUMBER" ]; then
-            echo "Detected PR #$PR_NUMBER from merge commit"
-            LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>/dev/null | tr '\n' ',' || true)
-            echo "labels=$LABELS" >> $GITHUB_OUTPUT
-          else
-            echo "Direct push or merge without PR number detected"
-            echo "labels=" >> $GITHUB_OUTPUT
+            echo "Detected PR #$PR_NUMBER from merge commit message"
+            PR_JSON=$(gh pr view "$PR_NUMBER" --json title,labels 2>/dev/null || true)
+            if [ -n "$PR_JSON" ]; then
+              PR_TITLE=$(echo "$PR_JSON" | jq -r '.title // empty')
+              PR_LABELS=$(echo "$PR_JSON" | jq -r '[.labels[].name] | join(",")' 2>/dev/null || true)
+            fi
           fi
+
+          if [ -z "$PR_TITLE" ]; then
+            echo "Searching merged PRs for commit ${{ github.sha }}..."
+            PR_JSON=$(gh pr list --state merged --search "${{ github.sha }}" --json number,title,labels --jq '.[0]' 2>/dev/null || true)
+            if [ -n "$PR_JSON" ] && [ "$PR_JSON" != "null" ]; then
+              PR_TITLE=$(echo "$PR_JSON" | jq -r '.title // empty')
+              PR_LABELS=$(echo "$PR_JSON" | jq -r '[.labels[].name] | join(",")' 2>/dev/null || true)
+            fi
+          fi
+
+          if [ -z "$PR_TITLE" ]; then
+            PR_TITLE=$(git log -1 --pretty=%s)
+          fi
+
+          echo "Detected PR Title : $PR_TITLE"
+          echo "Detected PR Labels: $PR_LABELS"
+          echo "title=$PR_TITLE" >> $GITHUB_OUTPUT
+          echo "labels=$PR_LABELS" >> $GITHUB_OUTPUT
 
       - name: Calculate next version
         id: versioning
@@ -60,7 +81,8 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           dart run tool/release/version_calculator.dart \
-            --labels="${{ steps.pr_labels.outputs.labels }}" \
+            --pr-title="${{ steps.pr_meta.outputs.title }}" \
+            --labels="${{ steps.pr_meta.outputs.labels }}" \
             --commit-message="${{ github.event.head_commit.message }}" \
             --github-output=$GITHUB_OUTPUT
 
@@ -70,19 +92,36 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ "${{ steps.versioning.outputs.should_release }}" = "false" ]; then
-            echo "Release was skipped by PR label or commit directive."
+            echo "Release was skipped by PR title classification or explicit release-skip directive."
             echo "proceed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           TAG="${{ steps.versioning.outputs.tag }}"
+          SOURCE_COMPLETE=false
+          DIST_COMPLETE=false
+
           if gh release view "$TAG" --repo "Omkar-git-hub/offlink" >/dev/null 2>&1; then
-            echo "Release $TAG already exists on source repository. Skipping creation to prevent duplicate conflict."
+            if gh release view "$TAG" --repo "Omkar-git-hub/offlink" --json assets --jq '.assets[].name' 2>/dev/null | grep -q "Offlink-"; then
+              echo "Release $TAG and assets already exist on source repository."
+              SOURCE_COMPLETE=true
+            fi
+          fi
+
+          if gh release view "$TAG" --repo "Omkar-git-hub/offlink-releases" >/dev/null 2>&1; then
+            if gh release view "$TAG" --repo "Omkar-git-hub/offlink-releases" --json assets --jq '.assets[].name' 2>/dev/null | grep -q "Offlink-"; then
+              echo "Release $TAG and assets already exist on distribution repository."
+              DIST_COMPLETE=true
+            fi
+          fi
+
+          if [ "$SOURCE_COMPLETE" = "true" ] && [ "$DIST_COMPLETE" = "true" ]; then
+            echo "Release $TAG is already fully published on both repositories. Skipping redundant release."
             echo "proceed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          echo "Release conditions verified. Proceeding with release for $TAG."
+          echo "Release conditions verified. Proceeding with release / idempotent reconciliation for $TAG."
           echo "proceed=true" >> $GITHUB_OUTPUT
 
       - name: Generate release notes
@@ -92,7 +131,23 @@ jobs:
           dart run tool/release/release_notes_generator.dart \
             --version=${{ steps.versioning.outputs.version }} \
             --tag=${{ steps.versioning.outputs.tag }} \
+            --pr-title="${{ steps.pr_meta.outputs.title }}" \
             --output=RELEASE_NOTES.md
+
+          # Ensure RELEASE_NOTES.md is never missing or empty
+          if [ ! -f RELEASE_NOTES.md ] || [ ! -s RELEASE_NOTES.md ]; then
+            echo "Warning: RELEASE_NOTES.md was empty or missing. Generating fallback release notes."
+            cat << 'EOF' > RELEASE_NOTES.md
+          # Offlink ${{ steps.versioning.outputs.tag }}
+
+          **Release Classification**: Developer Alpha (Pre-Release)
+          **Source Repository**: https://github.com/Omkar-git-hub/offlink
+
+          ### 📦 Changes
+          - ${{ steps.pr_meta.outputs.title }} (${{ github.sha }})
+          EOF
+          fi
+
 
       - name: Set up Android Keystore
         id: keystore
@@ -170,7 +225,7 @@ jobs:
             SHA256SUMS.txt
             RELEASE_NOTES.md
 
-      - name: Create GitHub Release on source repository (offlink)
+      - name: Create or update GitHub Release on source repository (offlink)
         if: steps.release_check.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -180,14 +235,25 @@ jobs:
             PRERELEASE_FLAG="--prerelease"
           fi
 
-          gh release create "${{ steps.versioning.outputs.tag }}" \
-            --repo "Omkar-git-hub/offlink" \
-            --target "${{ github.sha }}" \
-            --title "Offlink ${{ steps.versioning.outputs.tag }}" \
-            --notes-file RELEASE_NOTES.md \
-            $PRERELEASE_FLAG \
-            "Offlink-${{ steps.versioning.outputs.version }}.apk" \
-            SHA256SUMS.txt
+          TAG="${{ steps.versioning.outputs.tag }}"
+          VERSION="${{ steps.versioning.outputs.version }}"
+          APK_FILE="Offlink-${VERSION}.apk"
+
+          if gh release view "$TAG" --repo "Omkar-git-hub/offlink" >/dev/null 2>&1; then
+            echo "Release $TAG already exists on source repository. Uploading/reconciling assets..."
+            gh release upload "$TAG" "$APK_FILE" SHA256SUMS.txt --repo "Omkar-git-hub/offlink" --clobber
+          else
+            echo "Creating new GitHub Release $TAG on source repository..."
+            gh release create "$TAG" \
+              --repo "Omkar-git-hub/offlink" \
+              --target "${{ github.sha }}" \
+              --title "Offlink $TAG" \
+              --notes-file RELEASE_NOTES.md \
+              $PRERELEASE_FLAG \
+              "$APK_FILE" \
+              SHA256SUMS.txt
+          fi
+
 
       - name: Publish to distribution repository (offlink-releases)
         if: steps.release_check.outputs.proceed == 'true'

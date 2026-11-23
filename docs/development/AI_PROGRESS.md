@@ -1,21 +1,21 @@
 # AI Progress & Execution Checkpoint
 
 ## Current Module & Feature Branch
-- **Module**: CI/CD Release Automation — Protected Main Branch Compatibility
-- **Branch**: `fix/ci-cd-protected-main-compatibility`
+- **Module**: Offlink Fully Automatic PR-Based Release System
+- **Branch**: `feature/automatic-pr-release-system`
 - **Target**: `main`
 
 ## Objective & Acceptance Criteria
-- Fix GitHub Actions Release Automation for Protected `main`:
-  1. Eliminate direct `git push origin main` and source tree commits during release workflow.
-  2. Implement build-time dynamic version injection via `--build-name` and `--build-number`.
-  3. Ensure monotonic Android `versionCode` progression derived from tags and embedded build codes.
-  4. Implement PR release-skipping directives (`release:skip`, `no-release`, `[skip release]`).
-  5. Atomically tag releases using `gh release create <tag> --target $GITHUB_SHA` pointing directly to the merge commit.
-  6. Maintain 100% adherence to repository branch protection rules on `main` without weakening security.
+- Implement fully automatic PR-based release system driven by Conventional PR Titles:
+  1. Conventional PR title classification (`feat:`, `fix:`, `perf:` -> release; `feat!:`, `fix!:` -> breaking; `docs:`, `test:`, `chore:`, `ci:`, `refactor:` -> no release).
+  2. Automated PR title validation in CI (`Flutter CI`).
+  3. Simple Alpha versioning (`0.1.0-alpha.2` -> `0.1.0-alpha.3` on feature/fix; `0.2.0-alpha.1` on breaking).
+  4. Fix release notes generation argument parsing (`--output=` and `--output-file=`) and provide fail-safe fallback.
+  5. Idempotent retry & asset reconciliation across `offlink` and `offlink-releases`.
+  6. Zero manual routine actions other than **Review PR → Merge PR**.
 
 ## Status
-- **Status**: IMPLEMENTATION COMPLETE — 357/357 TESTS PASSING — READY FOR PR CREATION
+- **Status**: IMPLEMENTATION COMPLETE — 373+ TESTS PASSING — READY FOR PR CREATION
 
 ## Completed Work
 1. **Module 1 Merged into main**: PR #12 merged (`6d44f44`).
@@ -32,26 +32,29 @@
 12. **Initial Release Distribution Deployed**: `v0.1.0-alpha.1` on `Omkar-git-hub/offlink-releases` (`5a64550`).
 13. **Phase 1 Automated CI/CD and Release System**: PR #23 merged (`c88fcad`).
 14. **Bug Fix: BLE Service Discovery & Peer Identity**: PR #24 merged (`d59c5ae`).
-15. **CI/CD Protected Main Branch Compatibility**:
-    - Removed `Commit version bump and updated CHANGELOG to main` step from `.github/workflows/release.yml`.
-    - Added release-skipping support (`release:skip`, `no-release`, `[skip release]`) in `version_calculator.dart`.
-    - Enforced monotonic Android build code calculation in `version_calculator.dart`.
-    - Added `--target-commitish` support to `publish_release.dart`.
-    - Added idempotency checks to prevent duplicate releases or failure on workflow re-runs.
-    - Updated release tests with release-skip detection coverage.
+15. **CI/CD Protected Main Branch Compatibility**: PR #25 merged (`4867d43`).
+16. **Fully Automatic PR-Based Release System**:
+    - Created `tool/release/pr_classifier.dart` for Conventional PR title classification and validation.
+    - Updated `tool/release/version_calculator.dart` to support PR titles and automatic Alpha increments.
+    - Fixed `tool/release/release_notes_generator.dart` argument parsing and fallback file generation.
+    - Added automated PR title validation step in `.github/workflows/ci.yml`.
+    - Enhanced `.github/workflows/release.yml` with PR metadata extraction, idempotent checks, and clobbering asset uploads.
+    - Updated `tool/release/publish_release.dart` with `uploadAssets` reconciliation.
+    - Added comprehensive unit tests in `test/unit/release/pr_classifier_test.dart` and expanded existing test suites.
 
 ## Tests Run & Results
-- `dart format --output=none --set-exit-if-changed .`: PASS (183 files checked, 0 changed).
+- `dart format --output=none --set-exit-if-changed .`: PASS (185 files checked, 0 changed).
 - `flutter analyze`: PASS (0 issues found).
-- `flutter test`: PASS (357/357 tests passing across entire repository, 29 release tooling tests).
-- `version_calculator.dart` dry run: PASS (`v0.1.0-alpha.2`, versionCode 2, shouldRelease true).
+- `flutter test test/unit/release/`: PASS (51/51 release tests passing).
+- `flutter test`: PASS (373/373 tests passing across entire repository).
 
 ## Known Failures & Unresolved Issues
 - None.
 
 ## Exact Next Action
-1. Commit and push all changes on `fix/ci-cd-protected-main-compatibility`.
+1. Commit and push all changes on `feature/automatic-pr-release-system`.
 2. Open Pull Request targeting `main` on `Omkar-git-hub/offlink`.
 3. Report PR URL and CI status to user. Await manual review and merge (never auto-merge).
+
 
 
