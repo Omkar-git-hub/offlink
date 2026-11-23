@@ -131,5 +131,32 @@ void main() {
       expect(next.versionName, '0.1.0-alpha.3');
       expect(next.tagName, 'v0.1.0-alpha.3');
     });
+
+    test('detects release skipping via labels and commit message', () {
+      expect(SemanticVersion.isReleaseSkipped(['release:skip']), isTrue);
+      expect(SemanticVersion.isReleaseSkipped(['no-release']), isTrue);
+      expect(SemanticVersion.isReleaseSkipped(['skip-release']), isTrue);
+      expect(
+        SemanticVersion.isReleaseSkipped(
+          [],
+          commitMessage: 'chore: update docs [skip release]',
+        ),
+        isTrue,
+      );
+      expect(
+        SemanticVersion.isReleaseSkipped(
+          [],
+          commitMessage: 'fix: internal refactor [no release]',
+        ),
+        isTrue,
+      );
+      expect(SemanticVersion.isReleaseSkipped(['release:patch']), isFalse);
+      expect(
+        SemanticVersion.isReleaseSkipped([
+          'release:minor',
+        ], commitMessage: 'feat: new feature'),
+        isFalse,
+      );
+    });
   });
 }

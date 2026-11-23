@@ -173,11 +173,32 @@ class SemanticVersion {
 
     return candidate;
   }
+
+  /// Determines whether a release should be skipped based on PR labels or commit message.
+  static bool isReleaseSkipped(List<String> labels, {String? commitMessage}) {
+    final normalized = labels.map((l) => l.toLowerCase().trim()).toSet();
+    if (normalized.contains('release:skip') ||
+        normalized.contains('no-release') ||
+        normalized.contains('skip-release') ||
+        normalized.contains('skip:release')) {
+      return true;
+    }
+    if (commitMessage != null) {
+      final msg = commitMessage.toLowerCase();
+      if (msg.contains('[skip release]') ||
+          msg.contains('[no release]') ||
+          msg.contains('[release skip]')) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 /// CLI entrypoint for release automation.
 void main(List<String> args) {
   List<String> labels = [];
+  String? commitMessage = Platform.environment['COMMIT_MESSAGE'];
   String? githubOutputFile = Platform.environment['GITHUB_OUTPUT'];
   bool updatePubspec = false;
 
@@ -189,6 +210,8 @@ void main(List<String> args) {
           .map((s) => s.trim())
           .where((s) => s.isNotEmpty)
           .toList();
+    } else if (arg.startsWith('--commit-message=')) {
+      commitMessage = arg.substring('--commit-message='.length);
     } else if (arg.startsWith('--github-output=')) {
       githubOutputFile = arg.substring('--github-output='.length);
     } else if (arg == '--update-pubspec') {
@@ -202,6 +225,11 @@ void main(List<String> args) {
     labels.addAll(envLabels.split(',').map((s) => s.trim()));
   }
 
+  final shouldSkip = SemanticVersion.isReleaseSkipped(
+    labels,
+    commitMessage: commitMessage,
+  );
+
   // Fetch git tags
   final gitResult = Process.runSync('git', ['tag', '-l']);
   final existingTags = (gitResult.stdout as String)
@@ -210,14 +238,18 @@ void main(List<String> args) {
       .where((s) => s.isNotEmpty)
       .toList();
 
-  // Find latest tag
+  // Find latest tag and monotonic highest version code
   SemanticVersion? latestVersion;
   int highestVersionCode = 0;
+  int countValidTags = 0;
 
   for (final tag in existingTags) {
     final parsed = SemanticVersion.parse(tag);
     if (parsed != null) {
-      highestVersionCode++;
+      countValidTags++;
+      if (parsed.versionCode > highestVersionCode) {
+        highestVersionCode = parsed.versionCode;
+      }
       if (latestVersion == null) {
         latestVersion = parsed;
       } else {
@@ -239,6 +271,10 @@ void main(List<String> args) {
     }
   }
 
+  final baselineVersionCode = highestVersionCode > countValidTags
+      ? highestVersionCode
+      : countValidTags;
+
   final current = latestVersion != null
       ? SemanticVersion(
           major: latestVersion.major,
@@ -246,7 +282,7 @@ void main(List<String> args) {
           patch: latestVersion.patch,
           preReleaseChannel: latestVersion.preReleaseChannel,
           preReleaseIteration: latestVersion.preReleaseIteration,
-          versionCode: highestVersionCode > 0 ? highestVersionCode : 1,
+          versionCode: baselineVersionCode > 0 ? baselineVersionCode : 1,
         )
       : null;
 
@@ -262,6 +298,7 @@ void main(List<String> args) {
   stdout.writeln('Next VersionCode: ${next.versionCode}');
   stdout.writeln('Is PreRelease   : ${next.isPreRelease}');
   stdout.writeln('Channel         : ${next.preReleaseChannel ?? "stable"}');
+  stdout.writeln('Should Release  : ${!shouldSkip}');
 
   if (updatePubspec) {
     final pubspecFile = File('pubspec.yaml');
@@ -291,6 +328,7 @@ void main(List<String> args) {
     sink.writeln('version_code=${next.versionCode}');
     sink.writeln('is_prerelease=${next.isPreRelease}');
     sink.writeln('channel=${next.preReleaseChannel ?? "stable"}');
+    sink.writeln('should_release=${!shouldSkip}');
     sink.close();
   }
 }

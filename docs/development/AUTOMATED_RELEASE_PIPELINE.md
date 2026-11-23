@@ -11,14 +11,18 @@ Offlink is designed so that **the maintainer's only routine manual action is rev
 Once a Pull Request is approved and merged into `main`, GitHub Actions automation autonomously handles:
 1. Version increment determination based on PR labels and git tags.
 2. Generating Keep-a-Changelog compliant release notes from commit history.
-3. Updating `pubspec.yaml` and `CHANGELOG.md`.
+3. Injecting dynamic application versions at build time (`--build-name` and `--build-number`) without modifying source files on protected `main`.
 4. Injecting production signing credentials (with safe debug fallback).
 5. Compiling the production Android APK (`Offlink-<version>.apk`).
 6. Cryptographically verifying the APK (SHA-256 calculation, package ID, version codes).
-7. Tagging the source repository (`v<version>`).
+7. Tagging the source repository atomically with GitHub Releases targeting the merge commit (`v<version>`).
 8. Publishing a GitHub Release on the source repository ([`Omkar-git-hub/offlink`](https://github.com/Omkar-git-hub/offlink)).
 9. Synchronizing metadata, changelog, and release matrices to the official distribution repository ([`Omkar-git-hub/offlink-releases`](https://github.com/Omkar-git-hub/offlink-releases)).
 10. Publishing the official GitHub Release and binary assets to the distribution repository.
+
+> [!IMPORTANT]
+> **Protected `main` Branch Invariance**:
+> In compliance with strict repository branch protection, release automation **never** creates version-bump commits or pushes directly to `main`. All releases are tagged directly on the merged commit on `main`, and application versioning is injected into the Android binary via Flutter build arguments.
 
 ---
 
@@ -82,6 +86,10 @@ When opening or reviewing a Pull Request, apply **optional labels** to control h
 | `release:minor` | Increments minor version | `0.2.0-alpha.1` |
 | `release:major` | Increments major version | `1.0.0-alpha.1` |
 | `release:stable` | Promotes pre-release to General Availability | `0.1.0` |
+| `release:skip` / `no-release` | Explicitly skips release generation for internal PRs | *(No release created)* |
+
+### Release Skipping Directives
+If a change is internal, chore, or not ready for release distribution, add PR label `release:skip`, `no-release`, or include `[skip release]` or `[no release]` in the commit message. The release automation will detect the directive and cleanly exit without building or tagging.
 
 ### Collision Avoidance
 The `version_calculator.dart` utility automatically queries existing Git tags. If a calculated tag already exists, it monotonically advances the pre-release iteration or patch until an unused tag is found, preventing pipeline collisions.

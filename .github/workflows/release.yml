@@ -56,23 +56,47 @@ jobs:
 
       - name: Calculate next version
         id: versioning
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           dart run tool/release/version_calculator.dart \
             --labels="${{ steps.pr_labels.outputs.labels }}" \
-            --update-pubspec \
+            --commit-message="${{ github.event.head_commit.message }}" \
             --github-output=$GITHUB_OUTPUT
 
-      - name: Generate release notes and update CHANGELOG
+      - name: Check release conditions
+        id: release_check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.versioning.outputs.should_release }}" = "false" ]; then
+            echo "Release was skipped by PR label or commit directive."
+            echo "proceed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          TAG="${{ steps.versioning.outputs.tag }}"
+          if gh release view "$TAG" --repo "Omkar-git-hub/offlink" >/dev/null 2>&1; then
+            echo "Release $TAG already exists on source repository. Skipping creation to prevent duplicate conflict."
+            echo "proceed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Release conditions verified. Proceeding with release for $TAG."
+          echo "proceed=true" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
         id: release_notes
+        if: steps.release_check.outputs.proceed == 'true'
         run: |
           dart run tool/release/release_notes_generator.dart \
             --version=${{ steps.versioning.outputs.version }} \
             --tag=${{ steps.versioning.outputs.tag }} \
-            --output=RELEASE_NOTES.md \
-            --update-changelog
+            --output=RELEASE_NOTES.md
 
       - name: Set up Android Keystore
         id: keystore
+        if: steps.release_check.outputs.proceed == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.OFFLINK_KEYSTORE_BASE64 }}
           KEYSTORE_PASS: ${{ secrets.OFFLINK_KEYSTORE_PASSWORD }}
@@ -107,6 +131,7 @@ jobs:
           fi
 
       - name: Build Android Release APK
+        if: steps.release_check.outputs.proceed == 'true'
         run: |
           flutter build apk --release \
             --build-name=${{ steps.versioning.outputs.version }} \
@@ -115,6 +140,7 @@ jobs:
 
       - name: Prepare and verify release artifact
         id: verify_apk
+        if: steps.release_check.outputs.proceed == 'true'
         run: |
           VERSION="${{ steps.versioning.outputs.version }}"
           APK_NAME="Offlink-${VERSION}.apk"
@@ -134,22 +160,18 @@ jobs:
             echo "Keystore temporary file securely removed."
           fi
 
-      - name: Commit version bump and updated CHANGELOG to main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pubspec.yaml CHANGELOG.md
-          if ! git diff --cached --quiet; then
-            git commit -m "chore(release): bump version to ${{ steps.versioning.outputs.version }} [skip ci]"
-            git push origin main
-          fi
-
-      - name: Create Git tag on source repository
-        run: |
-          git tag -a "${{ steps.versioning.outputs.tag }}" -m "Release ${{ steps.versioning.outputs.tag }}"
-          git push origin "${{ steps.versioning.outputs.tag }}"
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v4
+        if: steps.release_check.outputs.proceed == 'true'
+        with:
+          name: release-artifacts-${{ steps.versioning.outputs.tag }}
+          path: |
+            Offlink-${{ steps.versioning.outputs.version }}.apk
+            SHA256SUMS.txt
+            RELEASE_NOTES.md
 
       - name: Create GitHub Release on source repository (offlink)
+        if: steps.release_check.outputs.proceed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -160,6 +182,7 @@ jobs:
 
           gh release create "${{ steps.versioning.outputs.tag }}" \
             --repo "Omkar-git-hub/offlink" \
+            --target "${{ github.sha }}" \
             --title "Offlink ${{ steps.versioning.outputs.tag }}" \
             --notes-file RELEASE_NOTES.md \
             $PRERELEASE_FLAG \
@@ -167,6 +190,7 @@ jobs:
             SHA256SUMS.txt
 
       - name: Publish to distribution repository (offlink-releases)
+        if: steps.release_check.outputs.proceed == 'true'
         env:
           RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
@@ -211,4 +235,6 @@ jobs:
             --apk="Offlink-${{ steps.versioning.outputs.version }}.apk" \
             --checksum=SHA256SUMS.txt \
             --prerelease=${{ steps.versioning.outputs.is_prerelease }} \
+            --target="main" \
             --token="$RELEASE_TOKEN"
+
