@@ -125,4 +125,25 @@ PR titles automatically drive release classification:
 - Added unit tests in `test/unit/release/pr_classifier_test.dart` (15 tests).
 - Expanded `test/unit/release/version_calculator_test.dart` (50+ tests total across release suite).
 
+---
+
+## Release Signing Hardening (Fail-Closed Architecture) (2026-11-24)
+- **Branch**: `security/release-signing-fail-closed`
+- **Objective**: Prevent official release APKs from ever being silently signed with debug credentials (`CN=Android Debug`) or built without valid production credentials.
+- **Implementation**:
+  1. **Gradle Build Configuration (`android/app/build.gradle.kts`)**:
+     - Permanently removed debug fallback from `buildTypes.release`.
+     - Hooked into `gradle.taskGraph.whenReady` to check for release tasks (`assembleRelease`, `packageRelease`, `bundleRelease`).
+     - Fails closed with an explicit `GradleException` if any of `OFFLINK_KEYSTORE_PATH`, `OFFLINK_KEYSTORE_PASSWORD`, `OFFLINK_KEY_ALIAS`, or `OFFLINK_KEY_PASSWORD` are missing or if the keystore file does not exist.
+     - Debug tasks (`assembleDebug`, `packageDebug`) remain completely functional for local development without credentials.
+  2. **GitHub Actions Release Workflow (`.github/workflows/release.yml`)**:
+     - Eliminated debug keystore generation fallback in `Set up Android Keystore`.
+     - Fails the workflow immediately with exit code 1 if required signing secrets are not configured.
+     - Added `--require-production` argument to `verify_release_apk.dart`.
+  3. **Verification Tooling (`tool/release/verify_release_apk.dart`)**:
+     - Added `ApkVerifier.isProductionCertificate` checking that the certificate Distinguished Name (`certDn`) does not contain `CN=Android Debug`.
+     - Unit tests in `test/unit/release/verify_release_apk_test.dart`.
+  4. **Pull Request CI Compatibility (`.github/workflows/ci.yml`)**:
+     - Configured ephemeral PR test keystore in runner temp to validate release compilation without requiring production secrets.
+
 

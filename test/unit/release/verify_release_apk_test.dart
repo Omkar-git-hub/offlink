@@ -81,4 +81,37 @@ Signer #1 certificate SHA-1 digest: 1a4551631d083108a5b34aebd6102e947882652c
       tempFile.deleteSync();
     });
   });
+
+  group('ApkVerifier Production Certificate Validation', () {
+    test('isProductionCertificate rejects debug certificate DN', () {
+      expect(
+        ApkVerifier.isProductionCertificate(
+          'C=US, O=Android, CN=Android Debug',
+        ),
+        isFalse,
+      );
+      expect(ApkVerifier.isProductionCertificate('CN=Android Debug'), isFalse);
+    });
+
+    test('isProductionCertificate rejects null and empty DN', () {
+      expect(ApkVerifier.isProductionCertificate(null), isFalse);
+      expect(ApkVerifier.isProductionCertificate(''), isFalse);
+      expect(ApkVerifier.isProductionCertificate('   '), isFalse);
+    });
+
+    test('isProductionCertificate accepts production certificate DN', () {
+      expect(
+        ApkVerifier.isProductionCertificate(
+          'CN=Offlink Production, O=Offlink, C=US',
+        ),
+        isTrue,
+      );
+      expect(
+        ApkVerifier.isProductionCertificate(
+          'EMAILADDRESS=contact@offlink.org, CN=Offlink Release Key, OU=Offlink, O=Offlink Community, L=Bangalore, ST=Karnataka, C=IN',
+        ),
+        isTrue,
+      );
+    });
+  });
 }

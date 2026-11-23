@@ -270,6 +270,23 @@ This document records durable architectural, protocol, security, and compatibili
     - If all assets exist on both repositories, the workflow logs clean completion and exits 0.
 - **Status**: Implemented in `feature/automatic-pr-release-system`.
 
+---
 
-
-
+## DECISION-017: Fail-Closed Android Release Signing Architecture
+- **Context**: In pre-release iterations, missing Android signing credentials silently fell back to debug signing (`CN=Android Debug`), and the release workflow script would generate an ephemeral debug keystore if `OFFLINK_KEYSTORE_BASE64` was not provided. This risked inadvertently distributing an official release APK signed with debug keys.
+- **Decision**:
+  - **Unconditional Release Signing in Gradle (`build.gradle.kts`)**:
+    - The fallback `signingConfig = signingConfigs.getByName("debug")` in `buildTypes.release` is permanently eliminated. Release builds always use `signingConfigs.getByName("release")`.
+  - **Fail-Closed Task Graph Validation (`gradle.taskGraph.whenReady`)**:
+    - When any release packaging or assembly task (`assembleRelease`, `packageRelease`, `bundleRelease`) is queued, Gradle inspects all 4 required environment variables (`OFFLINK_KEYSTORE_PATH`, `OFFLINK_KEYSTORE_PASSWORD`, `OFFLINK_KEY_ALIAS`, `OFFLINK_KEY_PASSWORD`) and verifies keystore file presence.
+    - If any credential is missing or the file does not exist, build execution aborts immediately with `GradleException("FAIL-CLOSED: Release signing credentials are missing...")`.
+    - Local debug tasks (`assembleDebug`, `packageDebug`) remain completely frictionless and unaffected.
+  - **Fail-Closed GitHub Actions Release Workflow (`release.yml`)**:
+    - Debug keystore generation is eliminated. If any required signing secret is missing, the workflow step fails fast with an explicit error and exit code 1.
+    - Temporary keystores are created with restrictive permissions (`chmod 600`) and deleted in an `if: always()` post-step.
+  - **Post-Build Production Certificate Verification (`verify_release_apk.dart`)**:
+    - The verification step in `release.yml` enforces `--require-production`.
+    - `ApkVerifier.isProductionCertificate` inspects the certificate Distinguished Name (`certDn`) extracted by `apksigner` and rejects any certificate containing `CN=Android Debug`.
+  - **Ephemeral Test Keystore for PR CI Validation (`ci.yml`)**:
+    - PR CI validates release compilation and packaging by generating an ephemeral test keystore in runner temp, confirming the release build pipeline functions without exposing or requiring production secrets.
+- **Status**: Implemented in `security/release-signing-fail-closed`.
