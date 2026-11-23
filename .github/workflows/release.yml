@@ -158,32 +158,20 @@ jobs:
           KEY_ALIAS: ${{ secrets.OFFLINK_KEY_ALIAS }}
           KEY_PASS: ${{ secrets.OFFLINK_KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Configuring production release keystore..."
-            KEYSTORE_FILE="${{ runner.temp }}/release.jks"
-            echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE"
-            echo "OFFLINK_KEYSTORE_PATH=$KEYSTORE_FILE" >> $GITHUB_ENV
-            echo "OFFLINK_KEYSTORE_PASSWORD=$KEYSTORE_PASS" >> $GITHUB_ENV
-            echo "OFFLINK_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
-            echo "OFFLINK_KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
-            echo "signed_type=Android Production Keystore" >> $GITHUB_OUTPUT
-          else
-            echo "::warning ::OFFLINK_KEYSTORE_BASE64 secret not set. Using debug fallback signing for pre-release."
-            mkdir -p ~/.android ~/.config/.android
-            if [ ! -f ~/.android/debug.keystore ] && [ ! -f ~/.config/.android/debug.keystore ]; then
-              keytool -genkeypair -v \
-                -keystore ~/.android/debug.keystore \
-                -alias androiddebugkey \
-                -keyalg RSA \
-                -keysize 2048 \
-                -validity 10000 \
-                -storepass android \
-                -keypass android \
-                -dname "CN=Android Debug,O=Android,C=US"
-              cp -f ~/.android/debug.keystore ~/.config/.android/debug.keystore 2>/dev/null || true
-            fi
-            echo "signed_type=Android Debug (Fallback Keystore)" >> $GITHUB_OUTPUT
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASS" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASS" ]; then
+            echo "::error ::FAIL-CLOSED: Missing required release signing credentials. OFFLINK_KEYSTORE_BASE64, OFFLINK_KEYSTORE_PASSWORD, OFFLINK_KEY_ALIAS, and OFFLINK_KEY_PASSWORD are all required."
+            exit 1
           fi
+
+          echo "Configuring production release keystore..."
+          KEYSTORE_FILE="${{ runner.temp }}/release.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FILE"
+          chmod 600 "$KEYSTORE_FILE" 2>/dev/null || true
+          echo "OFFLINK_KEYSTORE_PATH=$KEYSTORE_FILE" >> $GITHUB_ENV
+          echo "OFFLINK_KEYSTORE_PASSWORD=$KEYSTORE_PASS" >> $GITHUB_ENV
+          echo "OFFLINK_KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+          echo "OFFLINK_KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
+          echo "signed_type=Android Production Keystore" >> $GITHUB_OUTPUT
 
       - name: Build Android Release APK
         if: steps.release_check.outputs.proceed == 'true'
@@ -205,6 +193,7 @@ jobs:
             --apk="$APK_NAME" \
             --expected-package=io.github.omkar_git_hub.offlink \
             --checksum-file=SHA256SUMS.txt \
+            --require-production \
             --github-output=$GITHUB_OUTPUT
 
       - name: Clean up Keystore file

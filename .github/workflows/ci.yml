@@ -55,21 +55,22 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      - name: Ensure debug keystore exists
+      - name: Configure ephemeral PR test signing keystore
         run: |
-          mkdir -p ~/.android ~/.config/.android
-          if [ ! -f ~/.android/debug.keystore ] && [ ! -f ~/.config/.android/debug.keystore ]; then
-            keytool -genkeypair -v \
-              -keystore ~/.android/debug.keystore \
-              -alias androiddebugkey \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass android \
-              -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US"
-            cp -f ~/.android/debug.keystore ~/.config/.android/debug.keystore 2>/dev/null || true
-          fi
+          CI_KEYSTORE="${{ runner.temp }}/ci-test.jks"
+          keytool -genkeypair -v \
+            -keystore "$CI_KEYSTORE" \
+            -alias citestkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10 \
+            -storepass citestpass \
+            -keypass citestpass \
+            -dname "CN=Offlink CI Test,O=Offlink,C=US"
+          echo "OFFLINK_KEYSTORE_PATH=$CI_KEYSTORE" >> $GITHUB_ENV
+          echo "OFFLINK_KEYSTORE_PASSWORD=citestpass" >> $GITHUB_ENV
+          echo "OFFLINK_KEY_ALIAS=citestkey" >> $GITHUB_ENV
+          echo "OFFLINK_KEY_PASSWORD=citestpass" >> $GITHUB_ENV
 
       - name: Build Android Release APK
         run: flutter build apk --release --android-skip-build-dependency-validation
@@ -79,3 +80,10 @@ jobs:
           dart run tool/release/verify_release_apk.dart \
             --apk=build/app/outputs/flutter-apk/app-release.apk \
             --expected-package=io.github.omkar_git_hub.offlink
+
+      - name: Clean up CI test keystore
+        if: always()
+        run: |
+          if [ -n "$OFFLINK_KEYSTORE_PATH" ] && [ -f "$OFFLINK_KEYSTORE_PATH" ]; then
+            rm -f "$OFFLINK_KEYSTORE_PATH"
+          fi

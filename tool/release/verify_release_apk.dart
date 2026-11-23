@@ -84,6 +84,14 @@ class ApkVerifier {
     return result;
   }
 
+  /// Checks whether a certificate Distinguished Name (DN) represents a production signing certificate.
+  /// Rejects null, empty, or standard Android Debug certificate DNs (`CN=Android Debug`).
+  static bool isProductionCertificate(String? certDn) {
+    if (certDn == null || certDn.trim().isEmpty) return false;
+    if (certDn.contains('CN=Android Debug')) return false;
+    return true;
+  }
+
   /// Verifies an APK against expected parameters.
   static ApkVerificationResult verify({
     required File apkFile,
@@ -203,16 +211,15 @@ class ApkVerifier {
         );
       }
 
-      if (requireProductionSigning &&
-          certDn != null &&
-          certDn.contains('CN=Android Debug')) {
+      if (requireProductionSigning && !isProductionCertificate(certDn)) {
         return ApkVerificationResult(
           isValid: false,
           fileSize: fileSize,
           sha256Hash: hash,
           signerCertDn: certDn,
-          errorMessage:
-              'Production signing required, but APK is signed with Debug keystore ($certDn)',
+          errorMessage: certDn == null || certDn.isEmpty
+              ? 'Production signing required, but no certificate DN was found'
+              : 'Production signing required, but APK is signed with Debug keystore ($certDn)',
         );
       }
     }
