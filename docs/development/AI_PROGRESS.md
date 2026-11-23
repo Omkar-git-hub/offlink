@@ -1,23 +1,21 @@
 # AI Progress & Execution Checkpoint
 
 ## Current Module & Feature Branch
-- **Module**: Bug Fix — BLE Service Discovery Failure & Incorrect Peer Identity
-- **Branch**: `bugfix/ble-service-discovery-peer-identity`
+- **Module**: CI/CD Release Automation — Protected Main Branch Compatibility
+- **Branch**: `fix/ci-cd-protected-main-compatibility`
 - **Target**: `main`
 
 ## Objective & Acceptance Criteria
-- Resolve Real Android Hardware Connection & Identity Issues:
-  1. Fix BLE connection failure: `Unable to connect to motorola edge 50 pro: Bad state: Offlink BLE service was not found.`
-  2. Fix incorrect peer display name: Peers displayed as hardware model (`motorola`, `Motorola Edge 50 Pro`) instead of configured Offlink username.
-- Architectural Requirements:
-  - Migrate from nil UUID to RFC 4122 v4 standard UUIDs with canonical 128-bit normalization.
-  - Implement resilient GATT service discovery retry with backoff and cache clearing on Android.
-  - Separate `deviceModel` (hardware platform name) from `username` and `displayName`.
-  - Transmit Offlink username in BLE scan responses and authenticated cryptographic handshakes.
-  - Ensure zero regressions across 356 tests, clean static analysis, formatting, and successful debug APK build.
+- Fix GitHub Actions Release Automation for Protected `main`:
+  1. Eliminate direct `git push origin main` and source tree commits during release workflow.
+  2. Implement build-time dynamic version injection via `--build-name` and `--build-number`.
+  3. Ensure monotonic Android `versionCode` progression derived from tags and embedded build codes.
+  4. Implement PR release-skipping directives (`release:skip`, `no-release`, `[skip release]`).
+  5. Atomically tag releases using `gh release create <tag> --target $GITHUB_SHA` pointing directly to the merge commit.
+  6. Maintain 100% adherence to repository branch protection rules on `main` without weakening security.
 
 ## Status
-- **Status**: IMPLEMENTATION COMPLETE — 356/356 TESTS PASSING — DEBUG APK VERIFIED — READY FOR PR CREATION
+- **Status**: IMPLEMENTATION COMPLETE — 357/357 TESTS PASSING — READY FOR PR CREATION
 
 ## Completed Work
 1. **Module 1 Merged into main**: PR #12 merged (`6d44f44`).
@@ -32,30 +30,28 @@
 10. **Module 10 Merged into main**: PR #21 merged (`a34b4c7`).
 11. **Module 11 Merged into main**: PR #22 merged (`c41b0df`).
 12. **Initial Release Distribution Deployed**: `v0.1.0-alpha.1` on `Omkar-git-hub/offlink-releases` (`5a64550`).
-13. **Phase 1 Automated CI/CD and Release System**: PR #23 merged (`988975a`).
-14. **Bug Fix: BLE Service Discovery & Peer Identity**:
-    - Replaced nil UUID with RFC 4122 v4 UUIDs (`0f110001-...` through `0f110004-...`) and `0x0F11` manufacturer ID.
-    - Added resilient 3-attempt service discovery with progressive delay and `clearGattCache()` on Android.
-    - Refined `BlePeer` model with `deviceModel` (hardware) and `username` (Offlink user), defaulting `displayName` strictly to user name.
-    - Implemented scan response advertising of username via `AndroidAdvertiseSettings.advertiseResponseData`.
-    - Integrated sender username in `HandshakeInitPayload` and `HandshakeResponsePayload` with dynamic `peerIdentityUpdates` stream and conversation persistence.
-    - Updated `HomePage` UI tile hierarchy and error handling with user-actionable instructions.
+13. **Phase 1 Automated CI/CD and Release System**: PR #23 merged (`c88fcad`).
+14. **Bug Fix: BLE Service Discovery & Peer Identity**: PR #24 merged (`d59c5ae`).
+15. **CI/CD Protected Main Branch Compatibility**:
+    - Removed `Commit version bump and updated CHANGELOG to main` step from `.github/workflows/release.yml`.
+    - Added release-skipping support (`release:skip`, `no-release`, `[skip release]`) in `version_calculator.dart`.
+    - Enforced monotonic Android build code calculation in `version_calculator.dart`.
+    - Added `--target-commitish` support to `publish_release.dart`.
+    - Added idempotency checks to prevent duplicate releases or failure on workflow re-runs.
+    - Updated release tests with release-skip detection coverage.
 
 ## Tests Run & Results
 - `dart format --output=none --set-exit-if-changed .`: PASS (183 files checked, 0 changed).
 - `flutter analyze`: PASS (0 issues found).
-- `flutter test`: PASS (356/356 tests passing across entire repository, 4 new regression tests).
-  - `test/unit/bluetooth/` (79 tests)
-  - `test/unit/crypto/` (17 tests)
-  - `test/unit/messaging/direct_message_service_encryption_test.dart` (5 tests)
-  - `test/widget/` (27 tests)
-- `flutter build apk --debug`: PASS (`build/app/outputs/flutter-apk/app-debug.apk` built in 157.3s).
+- `flutter test`: PASS (357/357 tests passing across entire repository, 29 release tooling tests).
+- `version_calculator.dart` dry run: PASS (`v0.1.0-alpha.2`, versionCode 2, shouldRelease true).
 
 ## Known Failures & Unresolved Issues
 - None.
 
 ## Exact Next Action
-1. Commit and push all changes on `bugfix/ble-service-discovery-peer-identity`.
+1. Commit and push all changes on `fix/ci-cd-protected-main-compatibility`.
 2. Open Pull Request targeting `main` on `Omkar-git-hub/offlink`.
 3. Report PR URL and CI status to user. Await manual review and merge (never auto-merge).
+
 

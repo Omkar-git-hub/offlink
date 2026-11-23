@@ -224,4 +224,25 @@ This document records durable architectural, protocol, security, and compatibili
     - Stage 2 (E2EE Handshake): `HandshakeInitPayload` and `HandshakeResponsePayload` carry `senderUsername`. Upon completion of authenticated sessions, `DirectMessageService` persists verified usernames in `ConversationRepository` and emits `peerIdentityUpdates` to dynamically update UI tiles.
 - **Status**: Implemented in Bug Fix (`bugfix/ble-service-discovery-peer-identity`).
 
+---
+
+## DECISION-015: Protected-Main Compatible Build-Time Version Injection, Zero-Commit Release Automation, and Atomic Release Tagging
+- **Context**: Offlink enforces strict repository branch protection on `main` (`Changes must be made through a pull request` and `Required status check "Flutter CI" is expected`). Direct git pushes to `refs/heads/main` are blocked by GitHub repository rules (`GH013`). Automated release workflows that attempt to bump `pubspec.yaml` and `CHANGELOG.md` via direct commits to `main` fail immediately.
+- **Decision**:
+  - **Zero-Commit Release Architecture**:
+    - The release workflow (`.github/workflows/release.yml`) strictly avoids committing to or pushing to `main`.
+    - No source code or tracked metadata files (`pubspec.yaml`, `CHANGELOG.md`) are modified in the Git working tree of the release runner.
+  - **Dynamic Build-Time Version Injection**:
+    - Application versions and monotonically increasing Android build numbers are calculated by `tool/release/version_calculator.dart` from Git tags and PR labels.
+    - Versions are passed directly to Flutter at build time via `flutter build apk --release --build-name=<version> --build-number=<versionCode>`. Flutter's Gradle plugin injects these into `defaultConfig.versionName` and `defaultConfig.versionCode` without touching `pubspec.yaml` on disk.
+  - **Atomic Release Tagging via GitHub CLI**:
+    - Releases and tags are created atomically via `gh release create <tag> --target $GITHUB_SHA` pointing directly to the merge commit on `main`.
+    - Releases are published with compiled APK binaries (`Offlink-<version>.apk`), `SHA256SUMS.txt`, and generated release notes (`RELEASE_NOTES.md`).
+  - **Release Skipping Directives**:
+    - PR labels (`release:skip`, `no-release`, `skip-release`) and commit messages containing `[skip release]` or `[no release]` are parsed by `version_calculator.dart`. If present, release automation skips APK compilation and tagging gracefully.
+  - **Idempotency & Retry Safety**:
+    - Before building or publishing, the workflow verifies if the release or tag already exists. If an existing release is detected, creation is skipped to prevent duplicate conflicts or failure upon workflow re-runs.
+- **Status**: Implemented in `fix/ci-cd-protected-main-compatibility`.
+
+
 

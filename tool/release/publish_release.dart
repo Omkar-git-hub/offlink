@@ -102,6 +102,7 @@ void main(List<String> args) {
       Platform.environment['RELEASE_TOKEN'] ??
       Platform.environment['GH_TOKEN'] ??
       Platform.environment['GITHUB_TOKEN'];
+  String? targetCommitish;
   bool dryRun = false;
 
   for (final arg in args) {
@@ -115,6 +116,9 @@ void main(List<String> args) {
       version = arg.substring('--version='.length);
     } else if (arg.startsWith('--tag=')) {
       tag = arg.substring('--tag='.length);
+    } else if (arg.startsWith('--target=') ||
+        arg.startsWith('--target-commitish=')) {
+      targetCommitish = arg.split('=').sublist(1).join('=');
     } else if (arg.startsWith('--prerelease=')) {
       isPreRelease =
           arg.substring('--prerelease='.length).toLowerCase() == 'true';
@@ -203,6 +207,7 @@ void main(List<String> args) {
     notesFile: notesFile,
     assets: assets,
     isPreRelease: isPreRelease,
+    targetCommitish: targetCommitish,
     token: token,
   );
 

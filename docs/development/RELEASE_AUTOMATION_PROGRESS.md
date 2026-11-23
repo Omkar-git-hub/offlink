@@ -67,3 +67,18 @@ Establish a production-grade, fully automated CI/CD and release pipeline for Off
 - **Pure Dart Tooling**: All automation tools written in standard Dart for 100% portability, zero external runtime dependencies (no Python/Node requirement), and full unit test coverage using `flutter test`.
 - **Ephemeral Keystore Pattern**: Production keystore is reconstructed from base64 environment secret exclusively during CI execution and immediately removed in an `always()` post-action step.
 - **Fail-Safe Release Fallback**: If keystore secrets or `RELEASE_TOKEN` are not yet configured by the repository owner, the pipeline does not fail abruptly. Instead, it signs using debug fallback and logs actionable warnings directing the maintainer to `AUTOMATED_RELEASE_PIPELINE.md`.
+- **Protected-Main Branch Compatibility**: Release automation never pushes version bumps or changelogs to `main`. Versions are injected at build time (`--build-name` and `--build-number`), and releases are tagged atomically using GitHub Releases targeting the merged commit on `main`.
+
+---
+
+## Protected-Main Branch Compatibility Fix (2026-11-24)
+- **Branch**: `fix/ci-cd-protected-main-compatibility`
+- **Issue**: GitHub Actions runner failed on step `Commit version bump and updated CHANGELOG to main` with error `GH013: Repository rule violations found for refs/heads/main` (changes must be made through a pull request; required check `Flutter CI` expected).
+- **Resolution**:
+  1. Removed `git push origin main` and file commits from `.github/workflows/release.yml`.
+  2. Dynamically inject version and build number via `flutter build apk --release --build-name=... --build-number=...`.
+  3. Added release-skipping support (`release:skip`, `no-release`, `[skip release]`).
+  4. Made tag and release creation atomic using `gh release create <tag> --target $GITHUB_SHA`.
+  5. Added idempotency guards to skip duplicate releases safely on retries.
+  6. Verified 29/29 release unit tests passing, static analysis clean, and formatting clean.
+
