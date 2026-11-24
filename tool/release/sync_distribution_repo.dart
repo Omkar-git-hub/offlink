@@ -24,6 +24,7 @@ class DistributionRepoSynchronizer {
     required String channel,
     required bool preRelease,
     required String apkFileName,
+    String stableApkFileName = 'Offlink.apk',
     required int fileSize,
     required String sha256,
     String? signingType,
@@ -65,10 +66,13 @@ class DistributionRepoSynchronizer {
       'channel': channel,
       'preRelease': preRelease,
       'apkFileName': apkFileName,
+      'stableApkFileName': stableApkFileName,
       'fileSize': fileSize,
       'sha256': sha256,
       'downloadUrl':
           'https://github.com/Omkar-git-hub/offlink-releases/releases/download/$tag/$apkFileName',
+      'stableDownloadUrl':
+          'https://github.com/Omkar-git-hub/offlink-releases/releases/latest/download/$stableApkFileName',
       'signingCertificate': signingCert,
     };
 
@@ -182,6 +186,7 @@ void main(List<String> args) {
   );
   String? signingType;
   String? signingCertSha256;
+  String stableApkFileName = 'Offlink.apk';
 
   for (final arg in args) {
     if (arg.startsWith('--distribution-dir=')) {
@@ -194,6 +199,14 @@ void main(List<String> args) {
       tag = arg.substring('--tag='.length);
     } else if (arg.startsWith('--apk=')) {
       apkPath = arg.substring('--apk='.length);
+    } else if (arg.startsWith('--stable-apk=')) {
+      final s = arg.substring('--stable-apk='.length);
+      stableApkFileName = s.contains('/') || s.contains('\\')
+          ? File(s).uri.pathSegments.lastWhere(
+              (seg) => seg.isNotEmpty,
+              orElse: () => 'Offlink.apk',
+            )
+          : s;
     } else if (arg.startsWith('--sha256=')) {
       sha256 = arg.substring('--sha256='.length).trim();
     } else if (arg.startsWith('--checksum-file=')) {
@@ -268,6 +281,7 @@ void main(List<String> args) {
     channel: channel,
     preRelease: preRelease,
     apkFileName: apkFileName,
+    stableApkFileName: stableApkFileName,
     fileSize: fileSize,
     sha256: sha256,
     signingType: signingType,

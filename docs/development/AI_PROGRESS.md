@@ -1,23 +1,23 @@
 # AI Progress & Execution Checkpoint
 
 ## Current Module & Feature Branch
-- **Module**: Offlink Release Signing Hardening (Fail-Closed Architecture)
-- **Branch**: `security/release-signing-fail-closed`
+- **Module**: Offlink Release Distribution & Download Experience Overhaul
+- **Branch**: `feature/offlink-release-distribution-download-system`
 - **Target**: `main`
 
 ## Objective & Acceptance Criteria
-- Audit and harden Offlink's Android release signing configuration to make release builds fail safely (fail-closed) when permanent signing credentials are missing, invalid, or misconfigured:
-  1. Never allow an official release APK to silently fall back to debug signing.
-  2. Permanently eliminate debug signing fallback in `android/app/build.gradle.kts`.
-  3. Enforce fail-closed validation via `gradle.taskGraph.whenReady` for release packaging/assembly tasks.
-  4. Ensure local debug builds (`flutter build apk --debug`) remain unaffected and frictionless.
-  5. Harden `.github/workflows/release.yml` by removing debug keystore generation and failing fast when secrets are missing.
-  6. Enforce `--require-production` certificate verification in `verify_release_apk.dart`.
-  7. Configure ephemeral test keystore in `.github/workflows/ci.yml` so PR CI validates release compilation without requiring production secrets.
-  8. Update `AI_DECISIONS.md` (DECISION-017) and progress logs.
+- Upgrade the release pipeline, release tooling, and distribution repositories to provide seamless direct downloads and release management:
+  1. Build both versioned `Offlink-<version>.apk` and stable alias `Offlink.apk` during release workflow.
+  2. Record dual checksum entries in `SHA256SUMS.txt` via `verify_release_apk.dart --stable-alias=Offlink.apk`.
+  3. Publish both assets to GitHub Releases in both `Omkar-git-hub/offlink` and `Omkar-git-hub/offlink-releases`.
+  4. Enable GitHub Releases latest resolution in `offlink-releases` so `/releases/latest/download/Offlink.apk` resolves without 404.
+  5. Target dedicated `release` deployment branch in `Omkar-git-hub/offlink-releases`.
+  6. Enforce fail-closed check on `RELEASE_TOKEN` (`exit 1` if absent) to prevent partial releases.
+  7. Use leak-proof `http.https://github.com/.extraheader` for git push to `offlink-releases`.
+  8. Modernize `offlink-releases` documentation with prominent download button, installation steps, and verification instructions.
 
 ## Status
-- **Status**: IMPLEMENTATION COMPLETE — 382+ TESTS PASSING — LOCAL & CI VERIFICATION IN PROGRESS
+- **Status**: IMPLEMENTATION & TESTING COMPLETE — 57 RELEASE TESTS PASSING — PR IN PROGRESS
 
 ## Completed Work
 1. **Module 1 Merged into main**: PR #12 merged (`6d44f44`).
@@ -36,18 +36,18 @@
 14. **Bug Fix: BLE Service Discovery & Peer Identity**: PR #24 merged (`d59c5ae`).
 15. **CI/CD Protected Main Branch Compatibility**: PR #25 merged (`4867d43`).
 16. **Fully Automatic PR-Based Release System**: PR #26 merged (`06c8703`).
-17. **Release Signing Hardening (Fail-Closed Architecture)**:
-    - Removed debug fallback in `android/app/build.gradle.kts` `buildTypes.release`.
-    - Added `gradle.taskGraph.whenReady` fail-closed hook requiring all 4 signing variables (`OFFLINK_KEYSTORE_PATH`, `OFFLINK_KEYSTORE_PASSWORD`, `OFFLINK_KEY_ALIAS`, `OFFLINK_KEY_PASSWORD`) and keystore file existence for release tasks without affecting debug tasks.
-    - Hardened `.github/workflows/release.yml` by removing fallback debug keystore generation and passing `--require-production` to `verify_release_apk.dart`.
-    - Configured ephemeral PR test keystore in `.github/workflows/ci.yml` for release compilation validation.
-    - Added `ApkVerifier.isProductionCertificate` and unit tests in `test/unit/release/verify_release_apk_test.dart`.
-    - Documented `DECISION-017` in `docs/development/AI_DECISIONS.md`.
+17. **Release Signing Hardening (Fail-Closed Architecture)**: PR #27 merged (`b2a9e69`).
+18. **Release Distribution & Download Experience Overhaul**:
+    - Updated `tool/release/verify_release_apk.dart` with `--stable-alias=Offlink.apk`.
+    - Updated `tool/release/sync_distribution_repo.dart` with `--stable-apk=Offlink.apk`, recording `stableApkFileName` and `stableDownloadUrl`.
+    - Updated `tool/release/publish_release.dart` with `--stable-apk=`, `--distribution-mode`, and `setLatest()`.
+    - Updated `.github/workflows/release.yml` with dual-asset staging, fail-closed `RELEASE_TOKEN` check, leak-proof auth, and `release` branch target.
+    - Added comprehensive unit tests in `test/unit/release/`.
 
 ## Tests Run & Results
-- `dart format --output=none --set-exit-if-changed .`: PASS (185 files checked, 0 changed).
-- `flutter analyze`: PASS (0 issues found).
-- `flutter test`: PASS (382/382 tests passing across entire repository).
+- `dart format --output=none --set-exit-if-changed tool/ test/unit/release/`: PASS (12 files checked, 0 changed).
+- `flutter analyze tool/ test/unit/release/`: PASS (0 issues found).
+- `flutter test test/unit/release/`: PASS (57/57 tests passing).
 
 ## Known Failures & Unresolved Issues
 - None.

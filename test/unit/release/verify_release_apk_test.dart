@@ -80,6 +80,23 @@ Signer #1 certificate SHA-1 digest: 1a4551631d083108a5b34aebd6102e947882652c
 
       tempFile.deleteSync();
     });
+
+    test('generates dual checksum manifest for versioned and stable alias', () {
+      final tempDir = Directory.systemTemp.createTempSync('chk_test');
+      final apk = File('${tempDir.path}/Offlink-1.0.0.apk')
+        ..writeAsStringSync('APK binary payload');
+      final checksumFile = File('${tempDir.path}/SHA256SUMS.txt');
+
+      final hash = ApkVerifier.calculateSha256(apk);
+      final content = '$hash  Offlink-1.0.0.apk\n$hash  Offlink.apk\n';
+      checksumFile.writeAsStringSync(content);
+
+      final readContent = checksumFile.readAsStringSync();
+      expect(readContent, contains('$hash  Offlink-1.0.0.apk'));
+      expect(readContent, contains('$hash  Offlink.apk'));
+
+      tempDir.deleteSync(recursive: true);
+    });
   });
 
   group('ApkVerifier Production Certificate Validation', () {

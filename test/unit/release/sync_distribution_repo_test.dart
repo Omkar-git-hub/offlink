@@ -59,6 +59,11 @@ void main() {
       expect(json['latestRelease']['tag'], equals('v0.1.0-alpha.2'));
       expect(json['latestRelease']['preRelease'], isTrue);
       expect(json['latestRelease']['fileSize'], equals(45000000));
+      expect(json['latestRelease']['stableApkFileName'], equals('Offlink.apk'));
+      expect(
+        json['latestRelease']['stableDownloadUrl'],
+        contains('releases/latest/download/Offlink.apk'),
+      );
       expect(
         json['latestRelease']['signingCertificate']['type'],
         equals('Android Release Keystore'),

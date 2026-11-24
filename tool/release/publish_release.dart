@@ -80,6 +80,7 @@ class ReleasePublisher {
     required File notesFile,
     required List<File> assets,
     required bool isPreRelease,
+    bool makeLatest = false,
     String? targetCommitish,
     String? token,
   }) {
@@ -101,6 +102,8 @@ class ReleasePublisher {
 
     if (isPreRelease) {
       args.add('--prerelease');
+    } else if (makeLatest) {
+      args.add('--latest');
     }
 
     if (targetCommitish != null && targetCommitish.isNotEmpty) {
@@ -125,16 +128,46 @@ class ReleasePublisher {
     stdout.writeln(result.stdout);
     return true;
   }
+
+  /// Sets an existing release as latest and ensures it is published as standard release.
+  static bool setLatest({
+    required String repo,
+    required String tag,
+    String? token,
+  }) {
+    final env = token != null
+        ? {'GH_TOKEN': token, 'GITHUB_TOKEN': token}
+        : null;
+    final result = runCmd('gh', [
+      'release',
+      'edit',
+      tag,
+      '--repo',
+      repo,
+      '--latest',
+      '--prerelease=false',
+    ], environment: env);
+    if (result.exitCode != 0) {
+      stderr.writeln(
+        'Warning: Failed to set $tag as latest on $repo: ${result.stderr}',
+      );
+      return false;
+    }
+    stdout.writeln('Successfully marked $tag as latest release on $repo');
+    return true;
+  }
 }
 
 /// CLI entrypoint.
 void main(List<String> args) {
   String? apkPath;
+  String? stableApkPath;
   String? checksumPath;
   String? notesPath;
   String? version;
   String? tag;
   bool isPreRelease = true;
+  bool distributionMode = false;
   String distributionRepo = 'Omkar-git-hub/offlink-releases';
   String sourceRepo = 'Omkar-git-hub/offlink';
   String? token =
@@ -147,6 +180,10 @@ void main(List<String> args) {
   for (final arg in args) {
     if (arg.startsWith('--apk=')) {
       apkPath = arg.substring('--apk='.length);
+    } else if (arg.startsWith('--stable-apk=')) {
+      stableApkPath = arg.substring('--stable-apk='.length);
+    } else if (arg == '--distribution-mode') {
+      distributionMode = true;
     } else if (arg.startsWith('--checksum=')) {
       checksumPath = arg.substring('--checksum='.length);
     } else if (arg.startsWith('--notes=')) {
@@ -170,6 +207,10 @@ void main(List<String> args) {
     } else if (arg == '--dry-run') {
       dryRun = true;
     }
+  }
+
+  if (distributionMode) {
+    isPreRelease = false;
   }
 
   if (version == null || version.isEmpty) {
@@ -196,6 +237,16 @@ void main(List<String> args) {
     }
   }
 
+  if (stableApkPath != null && stableApkPath.isNotEmpty) {
+    final stableApk = File(stableApkPath);
+    if (stableApk.existsSync()) {
+      assets.add(stableApk);
+    } else {
+      stderr.writeln('Error: Stable APK file does not exist at $stableApkPath');
+      exit(1);
+    }
+  }
+
   if (checksumPath != null && checksumPath.isNotEmpty) {
     final checksumFile = File(checksumPath);
     if (checksumFile.existsSync()) {
@@ -212,6 +263,7 @@ void main(List<String> args) {
   stdout.writeln('Tag              : $tag');
   stdout.writeln('Title            : Offlink v$version');
   stdout.writeln('Pre-Release      : $isPreRelease');
+  stdout.writeln('Distribution Mode: $distributionMode');
   stdout.writeln(
     'Assets (${assets.length}): ${assets.map((a) => a.path).join(", ")}',
   );
@@ -243,7 +295,15 @@ void main(List<String> args) {
     );
     if (!uploaded) {
       stderr.writeln(
-        'Warning: Failed to reconcile some assets on $distributionRepo',
+        'Error: Failed to reconcile some assets on $distributionRepo',
+      );
+      exit(1);
+    }
+    if (distributionMode) {
+      ReleasePublisher.setLatest(
+        repo: distributionRepo,
+        tag: tag,
+        token: token,
       );
     }
     stdout.writeln('Release asset reconciliation completed.');
@@ -258,6 +318,7 @@ void main(List<String> args) {
     notesFile: notesFile,
     assets: assets,
     isPreRelease: isPreRelease,
+    makeLatest: distributionMode || !isPreRelease,
     targetCommitish: targetCommitish,
     token: token,
   );
