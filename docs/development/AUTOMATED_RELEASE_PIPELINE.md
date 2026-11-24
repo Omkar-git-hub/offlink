@@ -17,7 +17,7 @@ Once a Pull Request is approved and merged into `main`, GitHub Actions automatio
 6. Cryptographically verifying the APK (SHA-256 calculation for both assets, package ID, version codes).
 7. Tagging the source repository atomically with GitHub Releases targeting the merge commit (`v<version>`).
 8. Publishing a GitHub Release on the source repository ([`Omkar-git-hub/offlink`](https://github.com/Omkar-git-hub/offlink)).
-9. Synchronizing metadata, changelog, and release matrices to the dedicated `release` branch of the official distribution repository ([`Omkar-git-hub/offlink-releases`](https://github.com/Omkar-git-hub/offlink-releases)).
+9. Synchronizing metadata, changelog, and release matrices directly to the `main` branch of the official distribution repository ([`Omkar-git-hub/offlink-releases`](https://github.com/Omkar-git-hub/offlink-releases)).
 10. Publishing the official GitHub Release and dual binary assets (`Offlink-<version>.apk` and `Offlink.apk`) to the distribution repository with latest resolution enabled.
 
 > [!IMPORTANT]
@@ -55,11 +55,11 @@ Once a Pull Request is approved and merged into `main`, GitHub Actions automatio
 │    - Tag & Release on Omkar-git-hub/offlink                      │
 └─────────────────────────────────┬────────────────────────────────┘
                                   │ Push metadata & Dual Assets
-                                  │ (using RELEASE_TOKEN to 'release' branch)
+                                  │ (using RELEASE_TOKEN to 'main' branch)
                                   ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │ Public Distribution Repository: Omkar-git-hub/offlink-releases   │
-│ (Branch: 'release')                                              │
+│ (Branch: 'main')                                                 │
 ├──────────────────────────────────────────────────────────────────┤
 │ - Synchronized metadata/release-information.json                 │
 │ - Synchronized metadata/app-information.json                     │
@@ -198,7 +198,7 @@ All automation logic is implemented in self-contained Dart scripts located in `t
 
 1. **Ephemeral Secrets**: The base64 keystore is decoded into the runner's temporary directory (`${{ runner.temp }}/release.jks`), used exclusively during the Gradle task, and deleted in the `always()` post-build hook.
 2. **Leak-Proof Git Authentication**: Synchronization with `offlink-releases` uses `git config http.https://github.com/.extraheader "AUTHORIZATION: basic ..."` to avoid embedding credentials in URLs, process lists, or remote logs.
-3. **Dedicated Release Branch**: Distribution repository updates target a dedicated `release` deployment branch rather than committing directly to default branches.
+3. **Single Main Branch Architecture**: Distribution repository content and releases are maintained exclusively on `main`. Automation synchronizes directly to `main` with automated PR fallback for branch protection.
 4. **Secret Scanning**: `gitleaks-action` runs on every pull request and push to prevent accidental credential leakage into Git history.
 5. **Application Identity**: The application package ID is permanently anchored to `io.github.omkar_git_hub.offlink`, fulfilling F-Droid inclusion requirements and preventing clashes with placeholder IDs.
 6. **Reproducible Integrity**: Every release binary is accompanied by an authoritative `SHA256SUMS.txt` allowing independent client-side verification before installation.
