@@ -301,12 +301,15 @@ void main(List<String> args) {
   String? expectedVersion;
   int? expectedVersionCode;
   bool requireProduction = false;
+  String? stableAlias;
   String? checksumFile;
   String? githubOutputFile = Platform.environment['GITHUB_OUTPUT'];
 
   for (final arg in args) {
     if (arg.startsWith('--apk=')) {
       apkPath = arg.substring('--apk='.length);
+    } else if (arg.startsWith('--stable-alias=')) {
+      stableAlias = arg.substring('--stable-alias='.length);
     } else if (arg.startsWith('--expected-package=')) {
       expectedPackage = arg.substring('--expected-package='.length);
     } else if (arg.startsWith('--expected-version=')) {
@@ -356,10 +359,13 @@ void main(List<String> args) {
   );
 
   final apkBasename = apkFile.uri.pathSegments.last;
-  final checksumLine = '${result.sha256Hash}  $apkBasename\n';
+  var checksumContent = '${result.sha256Hash}  $apkBasename\n';
+  if (stableAlias != null && stableAlias.isNotEmpty) {
+    checksumContent += '${result.sha256Hash}  $stableAlias\n';
+  }
 
   if (checksumFile != null) {
-    File(checksumFile).writeAsStringSync(checksumLine);
+    File(checksumFile).writeAsStringSync(checksumContent);
     stdout.writeln('Wrote checksum to $checksumFile');
   }
 

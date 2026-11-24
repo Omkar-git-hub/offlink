@@ -188,9 +188,11 @@ jobs:
           VERSION="${{ steps.versioning.outputs.version }}"
           APK_NAME="Offlink-${VERSION}.apk"
           cp build/app/outputs/flutter-apk/app-release.apk "$APK_NAME"
+          cp "$APK_NAME" Offlink.apk
 
           dart run tool/release/verify_release_apk.dart \
             --apk="$APK_NAME" \
+            --stable-alias=Offlink.apk \
             --expected-package=io.github.omkar_git_hub.offlink \
             --checksum-file=SHA256SUMS.txt \
             --require-production \
@@ -211,6 +213,7 @@ jobs:
           name: release-artifacts-${{ steps.versioning.outputs.tag }}
           path: |
             Offlink-${{ steps.versioning.outputs.version }}.apk
+            Offlink.apk
             SHA256SUMS.txt
             RELEASE_NOTES.md
 
@@ -230,7 +233,7 @@ jobs:
 
           if gh release view "$TAG" --repo "Omkar-git-hub/offlink" >/dev/null 2>&1; then
             echo "Release $TAG already exists on source repository. Uploading/reconciling assets..."
-            gh release upload "$TAG" "$APK_FILE" SHA256SUMS.txt --repo "Omkar-git-hub/offlink" --clobber
+            gh release upload "$TAG" "$APK_FILE" Offlink.apk SHA256SUMS.txt --repo "Omkar-git-hub/offlink" --clobber
           else
             echo "Creating new GitHub Release $TAG on source repository..."
             gh release create "$TAG" \
@@ -240,9 +243,9 @@ jobs:
               --notes-file RELEASE_NOTES.md \
               $PRERELEASE_FLAG \
               "$APK_FILE" \
+              Offlink.apk \
               SHA256SUMS.txt
           fi
-
 
       - name: Publish to distribution repository (offlink-releases)
         if: steps.release_check.outputs.proceed == 'true'
@@ -250,13 +253,16 @@ jobs:
           RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           if [ -z "$RELEASE_TOKEN" ]; then
-            echo "::warning ::RELEASE_TOKEN secret is not set. Skipping release publishing to Omkar-git-hub/offlink-releases."
-            echo "To enable automatic publishing to the distribution repo, configure RELEASE_TOKEN secret with 'repo' scope."
-            exit 0
+            echo "::error ::FAIL-CLOSED: RELEASE_TOKEN secret is not set. Cannot publish release to Omkar-git-hub/offlink-releases. Release is partially published on source repository."
+            exit 1
           fi
 
-          echo "Cloning distribution repository..."
-          git clone "https://x-access-token:${RELEASE_TOKEN}@github.com/Omkar-git-hub/offlink-releases.git" dist-repo
+          echo "Cloning distribution repository (release branch)..."
+          git clone "https://github.com/Omkar-git-hub/offlink-releases.git" dist-repo
+          cd dist-repo
+          git config http.https://github.com/.extraheader "AUTHORIZATION: basic $(echo -n "x-access-token:${RELEASE_TOKEN}" | base64 -w 0)"
+          git checkout release 2>/dev/null || git checkout -b release
+          cd ..
 
           echo "Synchronizing distribution repository metadata..."
           dart run tool/release/sync_distribution_repo.dart \
@@ -265,6 +271,7 @@ jobs:
             --version-code=${{ steps.versioning.outputs.version_code }} \
             --tag=${{ steps.versioning.outputs.tag }} \
             --apk="Offlink-${{ steps.versioning.outputs.version }}.apk" \
+            --stable-apk="Offlink.apk" \
             --checksum-file=SHA256SUMS.txt \
             --notes=RELEASE_NOTES.md \
             --channel=${{ steps.versioning.outputs.channel }} \
@@ -277,7 +284,7 @@ jobs:
           git add metadata/ CHANGELOG.md RELEASES.md
           if ! git diff --cached --quiet; then
             git commit -m "docs(release): update metadata and changelog for ${{ steps.versioning.outputs.tag }}"
-            git push origin main
+            git push origin release
           fi
           cd ..
 
@@ -288,8 +295,10 @@ jobs:
             --tag=${{ steps.versioning.outputs.tag }} \
             --notes=RELEASE_NOTES.md \
             --apk="Offlink-${{ steps.versioning.outputs.version }}.apk" \
+            --stable-apk="Offlink.apk" \
             --checksum=SHA256SUMS.txt \
             --prerelease=${{ steps.versioning.outputs.is_prerelease }} \
-            --target="main" \
+            --distribution-mode \
+            --target="release" \
             --token="$RELEASE_TOKEN"
 

@@ -12,13 +12,13 @@ Once a Pull Request is approved and merged into `main`, GitHub Actions automatio
 1. Version increment determination based on PR labels and git tags.
 2. Generating Keep-a-Changelog compliant release notes from commit history.
 3. Injecting dynamic application versions at build time (`--build-name` and `--build-number`) without modifying source files on protected `main`.
-4. Injecting production signing credentials (with safe debug fallback).
-5. Compiling the production Android APK (`Offlink-<version>.apk`).
-6. Cryptographically verifying the APK (SHA-256 calculation, package ID, version codes).
+4. Injecting production signing credentials (fail-closed architecture).
+5. Compiling the production Android APK (`Offlink-<version>.apk` and stable alias `Offlink.apk`).
+6. Cryptographically verifying the APK (SHA-256 calculation for both assets, package ID, version codes).
 7. Tagging the source repository atomically with GitHub Releases targeting the merge commit (`v<version>`).
 8. Publishing a GitHub Release on the source repository ([`Omkar-git-hub/offlink`](https://github.com/Omkar-git-hub/offlink)).
-9. Synchronizing metadata, changelog, and release matrices to the official distribution repository ([`Omkar-git-hub/offlink-releases`](https://github.com/Omkar-git-hub/offlink-releases)).
-10. Publishing the official GitHub Release and binary assets to the distribution repository.
+9. Synchronizing metadata, changelog, and release matrices to the dedicated `release` branch of the official distribution repository ([`Omkar-git-hub/offlink-releases`](https://github.com/Omkar-git-hub/offlink-releases)).
+10. Publishing the official GitHub Release and dual binary assets (`Offlink-<version>.apk` and `Offlink.apk`) to the distribution repository with latest resolution enabled.
 
 > [!IMPORTANT]
 > **Protected `main` Branch Invariance**:
@@ -50,22 +50,26 @@ Once a Pull Request is approved and merged into `main`, GitHub Actions automatio
 │    - Version Calculator (tool/release/version_calculator.dart)   │
 │    - Release Notes (tool/release/release_notes_generator.dart)   │
 │    - Release Keystore Injection & Secure Cleanup                 │
-│    - Build Offlink-<version>.apk & SHA256SUMS.txt                │
+│    - Build Offlink-<version>.apk, Offlink.apk & SHA256SUMS.txt   │
 │    - Verify APK (tool/release/verify_release_apk.dart)           │
 │    - Tag & Release on Omkar-git-hub/offlink                      │
 └─────────────────────────────────┬────────────────────────────────┘
-                                  │ Push metadata & Assets
-                                  │ (using RELEASE_TOKEN)
+                                  │ Push metadata & Dual Assets
+                                  │ (using RELEASE_TOKEN to 'release' branch)
                                   ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │ Public Distribution Repository: Omkar-git-hub/offlink-releases   │
+│ (Branch: 'release')                                              │
 ├──────────────────────────────────────────────────────────────────┤
 │ - Synchronized metadata/release-information.json                 │
 │ - Synchronized metadata/app-information.json                     │
 │ - Synchronized CHANGELOG.md and RELEASES.md                      │
 │ - Official GitHub Release with:                                  │
-│     * Offlink-<version>.apk                                      │
-│     * SHA256SUMS.txt                                             │
+│     * Offlink-<version>.apk (versioned binary)                   │
+│     * Offlink.apk (stable latest download binary)                │
+│     * SHA256SUMS.txt (dual checksum manifest)                    │
+│ - Direct Download URL:                                           │
+│   releases/latest/download/Offlink.apk                           │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -142,8 +146,9 @@ In [`Omkar-git-hub/offlink`](https://github.com/Omkar-git-hub/offlink) > **Setti
 | `OFFLINK_KEY_ALIAS` | Key alias (`offlink`) | Falls back to debug signing if omitted |
 | `OFFLINK_KEY_PASSWORD` | Key password | Falls back to debug signing if omitted |
 
-> [!NOTE]
-> If keystore secrets are not yet configured, the release pipeline will build the release APK using the debug signing certificate and log an action warning. This guarantees builds never fail due to missing secrets during development.
+> [!IMPORTANT]
+> **Fail-Closed Security & Secrets Enforcement**:
+> In accordance with `DECISION-017`, release APK assembly strictly requires all 4 production signing secrets. If secrets are missing, the Gradle release task and workflow fail immediately (fail-closed) rather than falling back to an insecure debug keystore. Furthermore, `RELEASE_TOKEN` is mandatory for release publication; if absent, the workflow fails immediately (`exit 1`) to ensure incomplete release synchronization never occurs.
 
 ---
 
@@ -169,19 +174,20 @@ All automation logic is implemented in self-contained Dart scripts located in `t
 - Prepends notes to `CHANGELOG.md`.
 
 ### 3. `verify_release_apk.dart`
-- Computes SHA-256 checksum and writes `SHA256SUMS.txt`.
+- Computes SHA-256 checksum and writes `SHA256SUMS.txt` for both the versioned APK and optional `--stable-alias` (e.g. `Offlink.apk`).
 - Verifies the APK's package identity (`io.github.omkar_git_hub.offlink`).
 - Verifies version name and version code match expectations using `aapt`.
 - Verifies APK signature scheme and integrity using `apksigner`.
 
 ### 4. `publish_release.dart`
-- Integrates with GitHub CLI (`gh release create`).
+- Integrates with GitHub CLI (`gh release create` / `gh release edit`).
 - Verifies idempotency (skips duplicate release creation if already published).
-- Attaches `Offlink-<version>.apk` and `SHA256SUMS.txt`.
+- Attaches `Offlink-<version>.apk`, `Offlink.apk` (via `--stable-apk`), and `SHA256SUMS.txt`.
+- Supports `--distribution-mode` (enables latest release resolution on `offlink-releases` so `/releases/latest/download/Offlink.apk` resolves directly).
 - Supports dry-run verification mode.
 
 ### 5. `sync_distribution_repo.dart`
-- Updates `metadata/release-information.json` with new file sizes, hashes, and download links.
+- Updates `metadata/release-information.json` with new file sizes, hashes, stable download links (`stableApkFileName` and `stableDownloadUrl`), and versioned download links.
 - Confirms production application identity in `metadata/app-information.json`.
 - Prepends new release notes to `CHANGELOG.md` in `offlink-releases`.
 - Appends release matrix entries to `RELEASES.md` in `offlink-releases`.
@@ -191,6 +197,8 @@ All automation logic is implemented in self-contained Dart scripts located in `t
 ## 6. Security Guarantees & Safeguards
 
 1. **Ephemeral Secrets**: The base64 keystore is decoded into the runner's temporary directory (`${{ runner.temp }}/release.jks`), used exclusively during the Gradle task, and deleted in the `always()` post-build hook.
-2. **Secret Scanning**: `gitleaks-action` runs on every pull request and push to prevent accidental credential leakage into Git history.
-3. **Application Identity**: The application package ID is permanently anchored to `io.github.omkar_git_hub.offlink`, fulfilling F-Droid inclusion requirements and preventing clashes with placeholder IDs.
-4. **Reproducible Integrity**: Every release binary is accompanied by an authoritative `SHA256SUMS.txt` allowing independent client-side verification before installation.
+2. **Leak-Proof Git Authentication**: Synchronization with `offlink-releases` uses `git config http.https://github.com/.extraheader "AUTHORIZATION: basic ..."` to avoid embedding credentials in URLs, process lists, or remote logs.
+3. **Dedicated Release Branch**: Distribution repository updates target a dedicated `release` deployment branch rather than committing directly to default branches.
+4. **Secret Scanning**: `gitleaks-action` runs on every pull request and push to prevent accidental credential leakage into Git history.
+5. **Application Identity**: The application package ID is permanently anchored to `io.github.omkar_git_hub.offlink`, fulfilling F-Droid inclusion requirements and preventing clashes with placeholder IDs.
+6. **Reproducible Integrity**: Every release binary is accompanied by an authoritative `SHA256SUMS.txt` allowing independent client-side verification before installation.
