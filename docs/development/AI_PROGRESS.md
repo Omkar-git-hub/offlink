@@ -1,23 +1,20 @@
 # AI Progress & Execution Checkpoint
 
 ## Current Module & Feature Branch
-- **Module**: Offlink Release Distribution & Download Experience Overhaul
-- **Branch**: `feature/offlink-release-distribution-download-system`
+- **Module**: Distribution Pipeline Alignment to Single `main` Branch
+- **Branch**: `feature/distribution-main-branch-alignment`
 - **Target**: `main`
 
 ## Objective & Acceptance Criteria
-- Upgrade the release pipeline, release tooling, and distribution repositories to provide seamless direct downloads and release management:
-  1. Build both versioned `Offlink-<version>.apk` and stable alias `Offlink.apk` during release workflow.
-  2. Record dual checksum entries in `SHA256SUMS.txt` via `verify_release_apk.dart --stable-alias=Offlink.apk`.
-  3. Publish both assets to GitHub Releases in both `Omkar-git-hub/offlink` and `Omkar-git-hub/offlink-releases`.
-  4. Enable GitHub Releases latest resolution in `offlink-releases` so `/releases/latest/download/Offlink.apk` resolves without 404.
-  5. Target dedicated `release` deployment branch in `Omkar-git-hub/offlink-releases`.
-  6. Enforce fail-closed check on `RELEASE_TOKEN` (`exit 1` if absent) to prevent partial releases.
-  7. Use leak-proof `http.https://github.com/.extraheader` for git push to `offlink-releases`.
-  8. Modernize `offlink-releases` documentation with prominent download button, installation steps, and verification instructions.
+- Align the distribution pipeline and repository architectures to use exclusively the `main` branch across both repositories:
+  1. Maintain `main` as the sole branch in `Omkar-git-hub/offlink-releases` (remove unwanted `release` branch).
+  2. Update `.github/workflows/release.yml` in `offlink` to target `main` directly with automated PR and squash-merge fallback for branch protection.
+  3. Ensure distribution releases publish git tags targeting `main` (`--target="main"`).
+  4. Preserve all dual-asset release capabilities (`Offlink.apk` + `Offlink-<version>.apk`) and direct download functionality (`/releases/latest/download/Offlink.apk`).
+  5. Verify all tests, static analysis, and CI pass without errors.
 
 ## Status
-- **Status**: IMPLEMENTATION & TESTING COMPLETE — 57 RELEASE TESTS PASSING — PR IN PROGRESS
+- **Status**: IMPLEMENTATION & TESTING COMPLETE — READY FOR PR REVIEW
 
 ## Completed Work
 1. **Module 1 Merged into main**: PR #12 merged (`6d44f44`).
@@ -37,12 +34,12 @@
 15. **CI/CD Protected Main Branch Compatibility**: PR #25 merged (`4867d43`).
 16. **Fully Automatic PR-Based Release System**: PR #26 merged (`06c8703`).
 17. **Release Signing Hardening (Fail-Closed Architecture)**: PR #27 merged (`b2a9e69`).
-18. **Release Distribution & Download Experience Overhaul**:
-    - Updated `tool/release/verify_release_apk.dart` with `--stable-alias=Offlink.apk`.
-    - Updated `tool/release/sync_distribution_repo.dart` with `--stable-apk=Offlink.apk`, recording `stableApkFileName` and `stableDownloadUrl`.
-    - Updated `tool/release/publish_release.dart` with `--stable-apk=`, `--distribution-mode`, and `setLatest()`.
-    - Updated `.github/workflows/release.yml` with dual-asset staging, fail-closed `RELEASE_TOKEN` check, leak-proof auth, and `release` branch target.
-    - Added comprehensive unit tests in `test/unit/release/`.
+18. **Release Distribution & Download Experience Overhaul**: PR #28 merged (`e36aaf6`).
+19. **Distribution Pipeline Alignment to Single `main` Branch**:
+    - Removed `release` branch from `Omkar-git-hub/offlink-releases` (sole branch is `main`).
+    - Updated `.github/workflows/release.yml` in `offlink` to synchronize metadata and publish releases targeting `main`.
+    - Added automated PR and auto-merge fallback in case branch protection is enabled on `offlink-releases/main`.
+    - Verified `Offlink.apk` direct download resolution on live releases.
 
 ## Tests Run & Results
 - `dart format --output=none --set-exit-if-changed tool/ test/unit/release/`: PASS (12 files checked, 0 changed).
